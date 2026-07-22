@@ -1,0 +1,49 @@
+[package]
+name = "neo-audio"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+readme.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+authors.workspace = true
+homepage.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+realtime-tools = { workspace = true }
+crossbeam-channel = { workspace = true }
+thiserror = { workspace = true }
+ndarray = { workspace = true, optional = true }
+serde = { workspace = true, features = ["serde_derive"], optional = true }
+
+# optional dependencies
+rtaudio = { workspace = true, optional = true }
+portaudio = { workspace = true, optional = true }
+cpal = { workspace = true, optional = true }
+ringbuf = { workspace = true, optional = true }
+wasm-bindgen = { version = "0.2.58", optional = true }
+js-sys = { version = "0.3.35", optional = true }
+web-sys = { version = "0.3.35", features = [
+    "AudioContext",
+    "AudioContextOptions",
+    "AudioBuffer",
+    "AudioBufferSourceNode",
+    "AudioNode",
+    "AudioDestinationNode",
+    "Window",
+    "AudioContextState",
+], optional = true }
+
+
+[features]
+default = ["processors", "portaudio-backend"]
+portaudio-backend = ["portaudio"]
+rtaudio-backend = ["rtaudio"]
+cpal-backend = ["cpal", "ringbuf"]
+processors = ["dep:ndarray"]
+webaudio = ["dep:wasm-bindgen", "dep:js-sys", "dep:web-sys"]
+serde = ["dep:serde"]

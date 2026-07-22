@@ -1,0 +1,37 @@
+[workspace]
+members = [
+  "crates/neo-audio",
+  "crates/realtime-tools",
+
+  "voice-pitch-feedback",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.75"
+version = "0.2.1"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/neodsp/neo-audio"
+keywords = ["audio"]
+categories = ["multimedia::audio"]
+authors = ["Stephan Eckes <stephan@neodsp.com>"]
+homepage = "https://neodsp.com"
+readme = "README.md"
+
+[profile.dev.package."*"]
+opt-level = 2 # Optimize all dependencies in debug build
+
+[workspace.dependencies]
+neo-audio = { path = "crates/neo-audio" }
+realtime-tools = { path = "crates/realtime-tools" }
+
+cpal = "0.15.3"
+crossbeam-channel = "0.5.13"
+easer = "0.3.0"
+ndarray = "0.16.1"
+ringbuf = "0.4.7"
+rtaudio = "0.3.3"
+serde = "1.0.215"
+thiserror = "2.0.3"
+portaudio = "0.8.0"
