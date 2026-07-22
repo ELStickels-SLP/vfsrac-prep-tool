@@ -1,0 +1,20 @@
+[package]
+name = "voicePitchFeedback"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish = false
+description = "A voice app that changes pitch for biofeedback practice"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+oxifft = { version = "0.3.0" }
+eframe = "0.29.1"
+neo-audio = { workspace = true }
+realtime-tools = { workspace = true }
+
+
+[package.metadata.bundle]
+icon = ["icon.png"]
+identifier = "io.github.elstickelsSlp.voicePitchFeedback"
