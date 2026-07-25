@@ -5,11 +5,15 @@ use std::usize;
 use eframe::egui;
 use level_meter::level_meter;
 use neo_audio::{
-    backends::portaudio_backend::PortAudioBackend,
     prelude::*,
     processors::player::{bounded, Receiver, Sender},
 };
 use realtime_tools::smooth_value::{Easing, Linear, SmoothValue};
+
+#[cfg(windows)]
+use neo_audio::backends::rtaudio_backend::RtAudioBackend as AudioBackendImpl;
+#[cfg(not(windows))]
+use neo_audio::backends::portaudio_backend::PortAudioBackend as AudioBackendImpl;
 
 mod level_meter;
 mod pitch_processor;
@@ -29,7 +33,7 @@ fn main() {
 }
 
 struct NeoAudioEguiExample {
-    neo_audio: NeoAudio<PortAudioBackend>,
+    neo_audio: NeoAudio<AudioBackendImpl>,
     sender: Option<Sender<pitch_processor::PitchMessage>>,
     audio_running: bool,
     config: DeviceConfig,

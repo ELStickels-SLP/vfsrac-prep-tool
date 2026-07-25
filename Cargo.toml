@@ -5,6 +5,11 @@ members = [
 
   "voice-pitch-feedback",
 ]
+# `cargo build`/`run` without `-p` only builds the app, not every workspace
+# member. Building `neo-audio` on its own (as opposed to as a dependency)
+# uses its own Cargo.toml defaults (portaudio-backend), which doesn't build
+# on Windows and isn't what the app needs.
+default-members = ["voice-pitch-feedback"]
 resolver = "2"
 
 [workspace.package]
@@ -22,8 +27,19 @@ readme = "README.md"
 [profile.dev.package."*"]
 opt-level = 2 # Optimize all dependencies in debug build
 
+[profile.dev.package.rtaudio-sys]
+# Force this to opt-level 0 so the `cmake` crate maps to a true CMake "Debug"
+# build, in both dev and release profiles. Any other opt-level maps to
+# "RelWithDebInfo" or "Release", which omit the "d" debug-postfix that
+# rtaudio-sys's build.rs hardcodes looking for on Windows (rtaudiod.lib),
+# causing a link failure regardless of profile.
+opt-level = 0
+
+[profile.release.package.rtaudio-sys]
+opt-level = 0
+
 [workspace.dependencies]
-neo-audio = { path = "crates/neo-audio" }
+neo-audio = { path = "crates/neo-audio", default-features = false }
 realtime-tools = { path = "crates/realtime-tools" }
 
 cpal = "0.15.3"
