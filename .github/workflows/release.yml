@@ -19,7 +19,7 @@ jobs:
             artifact: voicePitchFeedback-windows-x86_64.exe
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact: voicePitchFeedback-macos-aarch64
+            artifact: voicePitchFeedback-macos-aarch64.zip
 
     runs-on: ${{ matrix.os }}
 
@@ -42,7 +42,19 @@ jobs:
 
       - name: Install macOS audio dependencies
         if: matrix.os == 'macos-latest'
-        run: brew install portaudio
+        run: brew install portaudio dylibbundler
+
+      - name: Set bundle version from tag
+        if: matrix.os == 'macos-latest'
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v ver="$version" '
+            /^\[workspace\.package\]/ { in_block=1; print; next }
+            /^\[/ { in_block=0 }
+            in_block && /^version = / && !done { print "version = \"" ver "\""; done=1; next }
+            { print }
+          ' Cargo.toml > Cargo.toml.tmp
+          mv Cargo.toml.tmp Cargo.toml
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -56,14 +68,37 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Install cargo-bundle
+        if: matrix.os == 'macos-latest'
+        run: cargo install cargo-bundle --locked
+
       - name: Build
+        if: matrix.os != 'macos-latest'
         run: cargo build --release --target ${{ matrix.target }} -p voice-pitch-feedback
 
-      - name: Stage binary (unix)
-        if: matrix.os != 'windows-latest'
+      - name: Stage binary (linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           mkdir -p dist
           cp target/${{ matrix.target }}/release/voice-pitch-feedback dist/${{ matrix.artifact }}
+
+      - name: Build .app bundle (macos)
+        if: matrix.os == 'macos-latest'
+        working-directory: voice-pitch-feedback
+        run: cargo bundle --release --target ${{ matrix.target }}
+
+      - name: Fix up dylib paths and package .app (macos)
+        if: matrix.os == 'macos-latest'
+        run: |
+          app=$(echo target/${{ matrix.target }}/release/bundle/osx/*.app)
+          bin="$app/Contents/MacOS/voice-pitch-feedback"
+          mkdir -p "$app/Contents/Frameworks"
+          dylibbundler -od -b \
+            -x "$bin" \
+            -d "$app/Contents/Frameworks" \
+            -p "@executable_path/../Frameworks/"
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent "$app" "dist/${{ matrix.artifact }}"
 
       - name: Stage binary (windows)
         if: matrix.os == 'windows-latest'
