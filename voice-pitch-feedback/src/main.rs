@@ -37,6 +37,7 @@ struct NeoAudioEguiExample {
     ui_receiver: Receiver<UiMessage>,
     input_level: SmoothValue,
     windows_processed: u32,
+    pitch_amount: f32,
 }
 
 impl NeoAudioEguiExample {
@@ -59,6 +60,7 @@ impl NeoAudioEguiExample {
             ui_receiver,
             input_level,
             windows_processed: 0,
+            pitch_amount: 70.0,
         }
     }
 }
@@ -167,6 +169,23 @@ impl eframe::App for NeoAudioEguiExample {
                     );
                     self.audio_running = true;
                     self.windows_processed = 0;
+                    if let Some(sender) = &self.sender {
+                        sender
+                            .send(pitch_processor::PitchMessage::Pitch(self.pitch_amount))
+                            .unwrap();
+                    }
+                }
+            }
+
+            let pitch_slider = ui.add(
+                egui::Slider::new(&mut self.pitch_amount, 0.0..=100.0)
+                    .text("Pitch Amount (Hz)"),
+            );
+            if pitch_slider.changed() {
+                if let Some(sender) = &self.sender {
+                    sender
+                        .send(pitch_processor::PitchMessage::Pitch(self.pitch_amount))
+                        .unwrap();
                 }
             }
 
