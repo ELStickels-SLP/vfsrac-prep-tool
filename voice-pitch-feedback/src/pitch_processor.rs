@@ -93,7 +93,7 @@ impl AudioProcessor for PitchProcessor {
 impl PitchProcessor {
     // TODO: Dampen pitches larger than human speech
     fn pitch_weight(a: &&oxifft::Complex<f32>, hz_ratio: f32) -> f32 {
-        a.norm_sqr() * hz_ratio
+        a.re * hz_ratio
     }
     fn process_window(&mut self) {
         // // tODO: real ring buffer
