@@ -64,8 +64,6 @@ jobs:
       - name: Set up MSVC dev environment
         if: matrix.os == 'windows-latest'
         uses: ilammy/msvc-dev-cmd@v1
-        with:
-          vsversion: "[17.0,18.0)"
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -76,6 +74,13 @@ jobs:
 
       - name: Build
         if: matrix.os != 'macos-latest'
+        env:
+          # cmake-rs auto-detects a "Visual Studio NN" generator via its own
+          # registry scan and panics on VS versions it doesn't recognize yet
+          # (e.g. VS 2026 "18.0" alongside 2022 on windows-latest runners).
+          # NMake Makefiles just needs cl.exe/nmake.exe on PATH (set up by
+          # msvc-dev-cmd above) and skips that lookup entirely.
+          CMAKE_GENERATOR: ${{ matrix.os == 'windows-latest' && 'NMake Makefiles' || '' }}
         run: cargo build --release --target ${{ matrix.target }} -p voice-pitch-feedback
 
       - name: Stage binary (linux)
