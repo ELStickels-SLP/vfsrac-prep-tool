@@ -13,13 +13,13 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact: voicePitchFeedback-linux-x86_64
+            artifact: voicePitchFeedback-linux
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact: voicePitchFeedback-windows-x86_64.exe
+            artifact: voicePitchFeedback-windows.exe
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact: voicePitchFeedback-macos-aarch64.zip
+            artifact: voicePitchFeedback-mac.zip
 
     runs-on: ${{ matrix.os }}
 
