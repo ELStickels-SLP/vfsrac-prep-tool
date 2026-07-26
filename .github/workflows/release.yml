@@ -5,6 +5,10 @@ on:
     tags:
       - "v*.*.*"
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
