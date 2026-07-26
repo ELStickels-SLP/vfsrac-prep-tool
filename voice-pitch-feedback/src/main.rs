@@ -22,6 +22,12 @@ use pitch_processor::PitchProcessor;
 
 static ANALYSIS_WIN_LENGTH: usize = 1500;
 
+// Set by git tags or "local" if not set
+static VERSION: &str = match option_env!("VFSRAC_VERSION") {
+    Some(v) => v,
+    None => "local",
+};
+
 fn main() {
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
@@ -74,6 +80,7 @@ impl eframe::App for NeoAudioEguiExample {
         ctx.set_pixels_per_point(2.0);
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("neo-audio egui example!");
+            ui.label(format!("Version: {VERSION}"));
 
             let backend = self.neo_audio.backend();
 
