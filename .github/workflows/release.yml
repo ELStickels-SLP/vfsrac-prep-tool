@@ -85,6 +85,19 @@ jobs:
           # NMake Makefiles just needs cl.exe/nmake.exe on PATH (set up by
           # msvc-dev-cmd above) and skips that lookup entirely.
           CMAKE_GENERATOR: ${{ matrix.os == 'windows-latest' && 'NMake Makefiles' || '' }}
+          # With an explicit generator, cmake-rs skips the flag-forcing it
+          # normally does for the Visual Studio generator, so RtAudio's own
+          # CMakeLists.txt rewrites CMake's default Debug flags ("/MDd") to
+          # "/MTd" (static debug CRT). That mismatches Rust's dynamic release
+          # CRT and fails to link (unresolved _CrtDbgReport, _malloc_dbg,
+          # etc). This toolchain file forces "/MD" instead. See
+          # .github/cmake/windows-crt.cmake for details.
+          CMAKE_TOOLCHAIN_FILE: ${{ matrix.os == 'windows-latest' && format('{0}/.github/cmake/windows-crt.cmake', github.workspace) || '' }}
+          # Statically link the CRT so the shipped .exe has no dependency on
+          # the VC++ Redistributable (MSVCP140.dll/VCRUNTIME140.dll) being
+          # installed on the target machine. Must match the static release
+          # CRT that windows-crt.cmake forces RtAudio to use above.
+          RUSTFLAGS: ${{ matrix.os == 'windows-latest' && '-C target-feature=+crt-static' || '' }}
         run: cargo build --release --target ${{ matrix.target }} -p voice-pitch-feedback
 
       - name: Stage binary (linux)
