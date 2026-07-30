@@ -1,7 +1,12 @@
 # macOS code signing + notarization plan
 
 Status: Apple Developer Program account created, awaiting verification.
-Notes for once the account is active.
+CI wiring (step 6 below) is implemented in
+[.github/workflows/release.yml](../.github/workflows/release.yml) and is a
+no-op until the secrets it references exist (guarded by
+`secrets.BUILD_CERTIFICATE_BASE64 != ''`), so unsigned builds keep working
+today. Remaining work is entirely account/secrets setup (steps 1-5) plus the
+final verification pass (step 7).
 
 Reference: https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications
 
@@ -37,6 +42,21 @@ Two separate things are needed:
 3. **Export the certificate + private key as a `.p12` file**
    - From Keychain Access: select the cert, export as `.p12`, set a
      password (this becomes `P12_PASSWORD` below).
+   - Or from the command line, once the cert + key are in the login
+     keychain:
+     ```sh
+     security export -k login.keychain-db \
+       -t identities \
+       -f pkcs12 \
+       -P "your-p12-password" \
+       -o cert.p12
+     ```
+     `-t identities` is required (exports the cert + matching private key
+     together — `-t certs` alone omits the key). If the keychain has
+     multiple identities, `security export` with no filter exports all of
+     them into one `.p12`; to isolate the Developer ID one, find its hash
+     via `security find-identity -v -p codesigning` and export from a
+     temporary keychain containing only that identity.
 
 4. **Base64-encode the `.p12` and add GitHub secrets** (following the
    GitHub doc linked above):
@@ -44,6 +64,10 @@ Two separate things are needed:
    - `P12_PASSWORD` — the export password from step 3
    - `KEYCHAIN_PASSWORD` — any throwaway password, used only to protect the
      temporary CI keychain for the duration of the job
+   - `APPLE_SIGNING_IDENTITY` — the certificate's full common name, e.g.
+     `Developer ID Application: <name> (<team id>)` (find via
+     `security find-identity -v -p codesigning` once the cert is imported
+     locally, or from the Apple Developer portal)
 
 5. **Apple ID app-specific password or API key, for notarization**
    - Simplest: an app-specific password generated at
@@ -58,31 +82,32 @@ Two separate things are needed:
      - `APPLE_API_KEY_ID`
      - `APPLE_API_ISSUER_ID`
 
-6. **CI integration** — insert steps into the `macos-latest` job in
-   [.github/workflows/release.yml](../.github/workflows/release.yml),
-   between "Fix up dylib paths and package .app (macos)" and "Upload
-   artifact" (i.e. sign after `dylibbundler` has finished rewriting the
-   bundle's dylib paths — signing must be the last thing that touches the
-   bundle's contents, since re-signing is needed if anything changes the
-   binary/frameworks afterward):
-   - Import the certificate into a temporary keychain (per the GitHub doc's
-     recipe: `security create-keychain`, `security import`, add to the
-     search list, unlock it).
-   - `codesign --deep --force --options runtime --sign "Developer ID Application: <name> (<team id>)" "$app"`
-     - `--options runtime` (hardened runtime) is required for notarization
-       to succeed.
-     - May need an entitlements plist if the app needs specific
-       capabilities (audio input via `com.apple.security.device.audio-input`
-       if sandboxed — check whether `cargo bundle`'s output is sandboxed;
-       if not sandboxed, entitlements are likely unnecessary beyond the
-       hardened runtime).
-   - Zip the `.app` (notarization submission wants a zip, not a raw bundle)
-     and submit: `xcrun notarytool submit app.zip --key <path-to-p8> --key-id <id> --issuer <issuer-id> --wait`
-   - On success: `xcrun stapler staple "$app"` to attach the notarization
-     ticket, so Gatekeeper can verify offline.
-   - Continue with the existing `ditto` step to produce the final
-     distributable zip (staple before this, so the stapled ticket is
-     included in what ships).
+6. **CI integration** — done. The `macos-latest` job in
+   [.github/workflows/release.yml](../.github/workflows/release.yml) now has,
+   between the dylib-path fixup and the final `dist/` packaging step:
+   - "Add microphone usage description (macos)" — always runs (needs no
+     secrets); adds `NSMicrophoneUsageDescription` to `Info.plist` via
+     `PlistBuddy`, since `cargo bundle` has no config surface for arbitrary
+     plist keys. The app isn't sandboxed, so no entitlements plist beyond
+     hardened runtime is needed.
+   - "Import signing certificate (macos)" — gated on
+     `secrets.BUILD_CERTIFICATE_BASE64 != ''`. Imports the `.p12` into a
+     temporary keychain (`security create-keychain`, `security import`,
+     `security list-keychains`, `security set-key-partition-list`).
+   - "Code sign .app (macos)" — same gate.
+     `codesign --deep --force --options runtime --sign "$SIGNING_IDENTITY" "$app"`,
+     where `SIGNING_IDENTITY` is a new secret, `APPLE_SIGNING_IDENTITY`
+     (the full string `Developer ID Application: <name> (<team id>)`) —
+     added instead of hardcoding the identity in the workflow.
+   - "Notarize .app (macos)" — same gate. Zips the app, runs
+     `xcrun notarytool submit ... --wait` with the App Store Connect API
+     key, then `xcrun stapler staple` on success.
+   - "Package .app (macos)" — always runs (the pre-existing `ditto` step,
+     now separated out so it runs after stapling regardless of whether
+     signing was gated off).
+
+   All steps after dylib fixup are ordered so signing is the last thing
+   touching the bundle's contents, per the reasoning above.
 
 7. **Verify**: download the final zip on a clean Mac (or one that hasn't
    built/run the app before), confirm `spctl -a -vvv --type execute
