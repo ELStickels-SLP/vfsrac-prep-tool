@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use eframe::egui::lerp;
 use neo_audio::prelude::*;
 use neo_audio::processors::player::Sender;
 use realtime_tools::smooth_value::{Easing, Linear, SmoothValue};
@@ -24,11 +25,7 @@ pub struct PitchProcessor {
     // // Streaming buffers
     input_buffer: VecDeque<f32>,
     output_buffer: VecDeque<f32>,
-    // input_write_idx: usize,
-    // output_read_idx: usize,
-    // output_write_idx: usize,
     ui_sender: Sender<UiMessage>,
-    process_call_count: u32,
 }
 
 impl PitchProcessor {
@@ -46,7 +43,6 @@ impl PitchProcessor {
             input_buffer: VecDeque::<f32>::new(),
             output_buffer: VecDeque::<f32>::new(),
             ui_sender,
-            process_call_count: 0,
         }
     }
 }

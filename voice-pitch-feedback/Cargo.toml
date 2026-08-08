@@ -9,7 +9,7 @@ description = "A voice app that changes pitch for biofeedback practice"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-oxifft = { version = "0.3.0" }
+oxifft = { version = "0.3.0", features = ["signal"] }
 eframe = "0.29.1"
 realtime-tools = { workspace = true }
 
