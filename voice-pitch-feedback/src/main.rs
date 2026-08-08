@@ -240,7 +240,7 @@ impl eframe::App for NeoAudioEguiExample {
                             UiMessage::Level(level) => {
                                 self.input_level.set_target_value(level);
                             }
-                            UiMessage::WindowProcessed => break,
+                            // UiMessage::WindowProcessed => break,
                         },
                         _ => break,
                     }
@@ -259,5 +259,5 @@ impl eframe::App for NeoAudioEguiExample {
 
 enum UiMessage {
     Level(f32),
-    WindowProcessed,
+    // WindowProcessed,
 }
