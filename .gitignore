@@ -11,3 +11,6 @@ target
 **/mutants.out*/
 # Wsl generated pointers
 *Zone.Identifier
+
+# Claude Code agent worktrees
+.claude/worktrees/
