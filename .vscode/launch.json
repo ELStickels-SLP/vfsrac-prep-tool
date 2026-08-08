@@ -1,0 +1,24 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in pitch_shift.rs",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=voice-pitch-feedback",
+                    "--package=voice-pitch-feedback"
+                ],
+                "filter": {
+                    "name": "voice-pitch-feedback",
+                    "kind": "bin"
+                }
+            },
+            "args": ["pitch_shift::tests::"],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
