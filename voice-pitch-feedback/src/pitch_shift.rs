@@ -1,5 +1,5 @@
 use eframe::egui::remap;
-use oxifft::rfft;
+use oxifft::{Complex, irfft, rfft};
 use oxifft::signal::resample;
 
 pub(crate) struct PitchShiftResult {
@@ -18,7 +18,7 @@ pub(crate) fn shift_pitch_window(
     let hz_ratio = (sample_rate as f32) / analysis_win_length as f32;
 
     // Forward real FFT: N samples -> N/2+1 complex bins
-    let spectrum: Vec<oxifft::Complex<f32>> = rfft(&samples[..analysis_win_length]);
+    let mut spectrum: Vec<oxifft::Complex<f32>> = rfft(&samples[..analysis_win_length]);
 
     let mut peak_freq = peak_frequency(&spectrum, hz_ratio);
     // If we get an overtone instead of the fundamental, downshift it till we're in human range
@@ -26,19 +26,27 @@ pub(crate) fn shift_pitch_window(
         peak_freq /= 2.
     }
 
-    // TODO: Phase shifting to avoid artifacts
 
     let hop_ratio = (peak_freq + pitch_amount_hz) / peak_freq;
     let synth_len = (analysis_win_length as f32 * hop_ratio).round() as usize;
 
-    let output_samples = resample(&samples[..analysis_win_length], synth_len);
-    // early out if we don't find anything useful
-    if peak_freq < 50. || hop_ratio < 1. || output_samples.len() < 2  {
+    if peak_freq < 50. || hop_ratio < 1. || synth_len < 40  {
         return PitchShiftResult {
             peak_freq: -1.,
             samples: samples.to_vec()
         };
     }
+    // TODO: Phase shifting to avoid artifacts
+    // TOODO: Lowpass filter to remove artifacts 
+
+    while spectrum.len() <= synth_len/2 {
+        spectrum.push(Complex::zero());
+    }
+
+    let output_samples = irfft(&spectrum, synth_len);
+    // let output_samples = resample(&samples[..analysis_win_length], synth_len);
+    // early out if we don't find anything useful
+
     let mut output = Vec::<f32>::with_capacity(analysis_win_length);
 
     // Interpolate samples to squeeze back into output
