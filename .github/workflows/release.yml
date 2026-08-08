@@ -30,36 +30,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Linux audio/GUI dependencies
-        # PortAudio for neo-audio, GTK3/X11/xkbcommon for eframe
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            portaudio19-dev \
-            libgtk-3-dev \
-            libxcb-render0-dev \
-            libxcb-shape0-dev \
-            libxcb-xfixes0-dev \
-            libxkbcommon-dev \
-            libssl-dev
-
-      - name: Install macOS audio dependencies
-        if: matrix.os == 'macos-latest'
-        run: brew install portaudio dylibbundler
-
-      - name: Set bundle version from tag
-        if: matrix.os == 'macos-latest'
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          awk -v ver="$version" '
-            /^\[workspace\.package\]/ { in_block=1; print; next }
-            /^\[/ { in_block=0 }
-            in_block && /^version = / && !done { print "version = \"" ver "\""; done=1; next }
-            { print }
-          ' Cargo.toml > Cargo.toml.tmp
-          mv Cargo.toml.tmp Cargo.toml
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -72,70 +42,20 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install cargo-bundle
-        if: matrix.os == 'macos-latest'
-        run: cargo install cargo-bundle --locked
-
-      - name: Build
-        if: matrix.os != 'macos-latest'
-        env:
-          # cmake-rs auto-detects a "Visual Studio NN" generator via its own
-          # registry scan and panics on VS versions it doesn't recognize yet
-          # (e.g. VS 2026 "18.0" alongside 2022 on windows-latest runners).
-          # NMake Makefiles just needs cl.exe/nmake.exe on PATH (set up by
-          # msvc-dev-cmd above) and skips that lookup entirely.
-          CMAKE_GENERATOR: ${{ matrix.os == 'windows-latest' && 'NMake Makefiles' || '' }}
-          # With an explicit generator, cmake-rs skips the flag-forcing it
-          # normally does for the Visual Studio generator, so RtAudio's own
-          # CMakeLists.txt rewrites CMake's default Debug flags ("/MDd") to
-          # "/MTd" (static debug CRT). That mismatches Rust's dynamic release
-          # CRT and fails to link (unresolved _CrtDbgReport, _malloc_dbg,
-          # etc). This toolchain file forces "/MD" instead. See
-          # .github/cmake/windows-crt.cmake for details.
-          CMAKE_TOOLCHAIN_FILE: ${{ matrix.os == 'windows-latest' && format('{0}/.github/cmake/windows-crt.cmake', github.workspace) || '' }}
-          # Statically link the CRT so the shipped .exe has no dependency on
-          # the VC++ Redistributable (MSVCP140.dll/VCRUNTIME140.dll) being
-          # installed on the target machine. Must match the static release
-          # CRT that windows-crt.cmake forces RtAudio to use above.
-          RUSTFLAGS: ${{ matrix.os == 'windows-latest' && '-C target-feature=+crt-static' || '' }}
-          VFSRAC_VERSION: ${{ github.ref_name }}
-        run: cargo build --release --target ${{ matrix.target }} -p voice-pitch-feedback
-
-      - name: Stage binary (linux)
+      - name: Build (linux)
         if: matrix.os == 'ubuntu-latest'
-        run: |
-          mkdir -p dist
-          cp target/${{ matrix.target }}/release/voice-pitch-feedback dist/${{ matrix.artifact }}
+        run: .github/scripts/build-linux.sh ${{ matrix.target }} ${{ matrix.artifact }}
+
+      - name: Build (windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: .github/scripts/build-windows.sh ${{ matrix.target }} ${{ matrix.artifact }}
 
       - name: Build .app bundle (macos)
         if: matrix.os == 'macos-latest'
-        working-directory: voice-pitch-feedback
-        env:
-          VFSRAC_VERSION: ${{ github.ref_name }}
-        run: cargo bundle --release --target ${{ matrix.target }}
+        run: .github/scripts/build-macos.sh ${{ matrix.target }}
 
-      - name: Fix up dylib paths (macos)
-        if: matrix.os == 'macos-latest'
-        run: |
-          app=$(echo target/${{ matrix.target }}/release/bundle/osx/*.app)
-          bin="$app/Contents/MacOS/voice-pitch-feedback"
-          mkdir -p "$app/Contents/Frameworks"
-          dylibbundler -od -b \
-            -x "$bin" \
-            -d "$app/Contents/Frameworks" \
-            -p "@executable_path/../Frameworks/"
-
-      - name: Add microphone usage description (macos)
-        # Required by macOS privacy (TCC) prompts since the app captures live
-        # audio input; needed regardless of code signing.
-        if: matrix.os == 'macos-latest'
-        run: |
-          app=$(echo target/${{ matrix.target }}/release/bundle/osx/*.app)
-          /usr/libexec/PlistBuddy -c \
-            "Add :NSMicrophoneUsageDescription string 'Used to analyze and pitch-shift your voice for biofeedback practice.'" \
-            "$app/Contents/Info.plist"
-
-      - name: Import signing certificate (macos)
+      - name: Sign and notarize .app (macos)
         # No-op until the Developer ID cert/notarization secrets exist (see
         # .claude/macos-code-signing-plan.md) - the .app ships unsigned until
         # then, same as today.
@@ -144,52 +64,11 @@ jobs:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          certificate_path="$RUNNER_TEMP/build_certificate.p12"
-          keychain_path="$RUNNER_TEMP/app-signing.keychain-db"
-
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$certificate_path"
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
-          security set-keychain-settings -lut 21600 "$keychain_path"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
-
-          security import "$certificate_path" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
-          security list-keychains -d user -s "$keychain_path" login.keychain
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$keychain_path"
-
-      - name: Code sign .app (macos)
-        if: matrix.os == 'macos-latest'
-        env:
-          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: |
-          keychain_path="$RUNNER_TEMP/app-signing.keychain-db"
-          app=$(echo target/${{ matrix.target }}/release/bundle/osx/*.app)
-          codesign --deep --force --options runtime \
-            --keychain "$keychain_path" \
-            --sign "$SIGNING_IDENTITY" "$app"
-
-      - name: Notarize .app (macos)
-        if: matrix.os == 'macos-latest'
-        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
-        run: |
-          app=$(echo target/${{ matrix.target }}/release/bundle/osx/*.app)
-          api_key_path="$RUNNER_TEMP/AuthKey.p8"
-          echo -n "$APPLE_API_KEY_BASE64" | base64 --decode -o "$api_key_path"
-
-          notarize_zip="$RUNNER_TEMP/notarize.zip"
-          ditto -c -k --keepParent "$app" "$notarize_zip"
-
-          xcrun notarytool submit "$notarize_zip" \
-            --key "$api_key_path" \
-            --key-id "$APPLE_API_KEY_ID" \
-            --issuer "$APPLE_API_ISSUER_ID" \
-            --wait
-
-          xcrun stapler staple "$app"
+        run: .github/scripts/sign-macos.sh ${{ matrix.target }}
 
       - name: Package .app (macos)
         if: matrix.os == 'macos-latest'
@@ -197,13 +76,6 @@ jobs:
           app=$(echo target/${{ matrix.target }}/release/bundle/osx/*.app)
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent "$app" "dist/${{ matrix.artifact }}"
-
-      - name: Stage binary (windows)
-        if: matrix.os == 'windows-latest'
-        shell: bash
-        run: |
-          mkdir -p dist
-          cp target/${{ matrix.target }}/release/voice-pitch-feedback.exe dist/${{ matrix.artifact }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
