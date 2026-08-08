@@ -1,4 +1,4 @@
-use eframe::egui::{lerp, remap};
+use eframe::egui::remap;
 use oxifft::rfft;
 use oxifft::signal::resample;
 
@@ -32,7 +32,13 @@ pub(crate) fn shift_pitch_window(
     let synth_len = (analysis_win_length as f32 * hop_ratio).round() as usize;
 
     let output_samples = resample(&samples[..analysis_win_length], synth_len);
-
+    // early out if we don't find anything useful
+    if peak_freq < 50. || hop_ratio < 1. || output_samples.len() < 2  {
+        return PitchShiftResult {
+            peak_freq: -1.,
+            samples: samples.to_vec()
+        };
+    }
     let mut output = Vec::<f32>::with_capacity(analysis_win_length);
 
     // Interpolate samples to squeeze back into output
@@ -55,24 +61,29 @@ pub(crate) fn shift_pitch_window(
     }
 }
 
-// TODO: Dampen pitches larger than human speech
-fn pitch_weight(a: &&oxifft::Complex<f32>, hz_ratio: f32) -> f32 {
-    a.re * hz_ratio
-}
+/// A peak bin magnitude below this fraction of full scale is treated as
+/// noise floor rather than a real tone. `rfft` is unnormalized, so the
+/// magnitude is divided by `spectrum.len() - 1` (~ half the window
+/// length) first to get a window-length-independent amplitude estimate.
+const MIN_PEAK_AMPLITUDE: f32 = 0.01;
 
 /// Finds the dominant frequency in `spectrum` (skipping the DC bin at index 0).
+/// Returns -1 if the spectrum doesn't have enough energy for the peak to be
+/// meaningful (e.g. silence or noise floor).
 fn peak_frequency(spectrum: &[oxifft::Complex<f32>], hz_ratio: f32) -> f32 {
-    let peak_idx = spectrum
+    let (peak_idx, peak_bin) = spectrum
         .iter()
         .enumerate()
         .skip(1)
         .max_by(|(_, a), (_, b)| {
-            pitch_weight(a, hz_ratio)
-                .partial_cmp(&pitch_weight(b, hz_ratio))
-                .unwrap()
+            (&a.re).total_cmp(&b.re)
         })
-        .map(|(i, _)| i)
         .unwrap();
+
+    let amplitude = peak_bin.norm() / (spectrum.len() - 1) as f32;
+    if amplitude < MIN_PEAK_AMPLITUDE {
+        return -1.;
+    }
 
     peak_idx as f32 * hz_ratio
 }
