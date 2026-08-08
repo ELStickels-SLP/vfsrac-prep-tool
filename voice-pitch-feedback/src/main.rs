@@ -29,6 +29,23 @@ static VERSION: &str = match option_env!("VFSRAC_VERSION") {
     None => "local",
 };
 
+// Second-largest/smallest rather than the extremes: the largest sample rate
+// and smallest num_frames tend to be backend-reported edge values that
+// underperform on real hardware.
+fn second_largest(values: &[u32]) -> Option<u32> {
+    let mut sorted = values.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+    sorted.iter().rev().nth(1).copied().or(sorted.last().copied())
+}
+
+fn second_smallest(values: &[u32]) -> Option<u32> {
+    let mut sorted = values.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+    sorted.get(1).or(sorted.first()).copied()
+}
+
 fn main() {
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
@@ -57,15 +74,25 @@ impl NeoAudioEguiExample {
         // Restore app state using cc.storage (requires the "persistence" feature).
         // Use the cc.gl (a glow::Context) to create graphics shaders and buffers that you can use
         // for e.g. egui::PaintCallback.
-        let neo_audio = NeoAudio::<AudioBackendImpl>::new().unwrap();
-        let backend = neo_audio.backend();
+        let mut neo_audio = NeoAudio::<AudioBackendImpl>::new().unwrap();
         let (ui_sender, ui_receiver) = bounded(1024);
         let mut input_level = SmoothValue::new(-60.0, Linear::ease_in_out);
         input_level.prepare(60, 100);
+
+        let backend = neo_audio.backend();
+        let mut config = backend.config();
+        if let Some(sample_rate) = second_largest(&backend.available_sample_rates()) {
+            config.sample_rate = sample_rate;
+        }
+        if let Some(num_frames) = second_smallest(&backend.available_num_frames()) {
+            config.num_frames = num_frames;
+        }
+        let config = neo_audio.backend_mut().set_config(&config).unwrap();
+
         Self {
             audio_running: false,
             sender: None,
-            config: backend.config(),
+            config,
             neo_audio,
             ui_sender,
             ui_receiver,
