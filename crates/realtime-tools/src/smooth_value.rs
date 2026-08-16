@@ -45,6 +45,9 @@ impl SmoothValue {
         self.change = 0.0;
         self.counter = self.num_steps + 1;
     }
+    pub fn cur_level(&mut self) -> f32 {
+        self.current
+    }
 
     pub fn next_value(&mut self) -> f32 {
         if self.counter > self.num_steps {
