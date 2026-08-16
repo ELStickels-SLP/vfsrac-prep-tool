@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use eframe::egui::{self, Align2, Color32, FontId, Stroke};
+use eframe::egui::{self, Align2, Color32, FontId, Stroke, StrokeKind};
 
 #[allow(dead_code)]
 fn level_meter_ui(
@@ -17,8 +17,13 @@ fn level_meter_ui(
         let visuals = ui.style().interact(&response);
         let rect = rect.expand(visuals.expansion);
         // background
-        ui.painter()
-            .rect(rect, 0.0, visuals.bg_fill, visuals.bg_stroke);
+        ui.painter().rect(
+            rect,
+            0.0,
+            visuals.bg_fill,
+            visuals.bg_stroke,
+            StrokeKind::Middle,
+        );
 
         let mut rect = rect;
         *rect.right_mut() = egui::remap(level_db, lvl_range, rect.left()..=rect.right());
@@ -27,7 +32,8 @@ fn level_meter_ui(
         } else {
             Color32::RED
         };
-        ui.painter().rect(rect, 0.0, color, Stroke::NONE);
+        ui.painter()
+            .rect(rect, 0.0, color, Stroke::NONE, StrokeKind::Middle);
         if draw_label {
             ui.painter().text(
                 rect.left_center(),

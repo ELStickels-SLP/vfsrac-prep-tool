@@ -104,9 +104,9 @@ impl NeoAudioEguiExample {
 }
 
 impl eframe::App for NeoAudioEguiExample {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.set_pixels_per_point(2.0);
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        ui.ctx().set_pixels_per_point(2.0);
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("neo-audio egui example!");
             ui.label(format!("Version: {VERSION}"));
 
