@@ -1,6 +1,5 @@
 use eframe::egui::remap;
 use oxifft::{Complex, irfft, rfft};
-use oxifft::signal::resample;
 
 pub(crate) struct PitchShiftResult {
     pub(crate) peak_freq: f32,
@@ -14,6 +13,7 @@ pub(crate) fn shift_pitch_window(
     sample_rate: u32,
     analysis_win_length: usize,
     pitch_amount_hz: f32,
+    angle_buffer: &mut [f32]
 ) -> PitchShiftResult {
     let hz_ratio = (sample_rate as f32) / analysis_win_length as f32;
 
@@ -30,6 +30,7 @@ pub(crate) fn shift_pitch_window(
     let hop_ratio = (peak_freq + pitch_amount_hz) / peak_freq;
     let synth_len = (analysis_win_length as f32 * hop_ratio).round() as usize;
 
+    // early out if we don't find anything useful
     if peak_freq < 50. || hop_ratio < 1. || synth_len < 40  {
         return PitchShiftResult {
             peak_freq: -1.,
@@ -37,15 +38,16 @@ pub(crate) fn shift_pitch_window(
         };
     }
     // TODO: Phase shifting to avoid artifacts
+
+    // spectrum_phase_match(&mut spectrum, angle_buffer, hop_ratio, false);
     // TOODO: Lowpass filter to remove artifacts 
 
-    while spectrum.len() <= synth_len/2 {
-        spectrum.push(Complex::zero());
-    }
+    let target_len = synth_len / 2 + 1;
+    spectrum = interleave_with_zero_bins(&spectrum, target_len);
 
     let output_samples = irfft(&spectrum, synth_len);
     // let output_samples = resample(&samples[..analysis_win_length], synth_len);
-    // early out if we don't find anything useful
+
 
     let mut output = Vec::<f32>::with_capacity(analysis_win_length);
 
@@ -67,6 +69,61 @@ pub(crate) fn shift_pitch_window(
         peak_freq,
         samples: output,
     }
+}
+
+fn spectrum_phase_match(spectrum:  &mut [Complex<f32>],  angles: &mut[f32], hop_ratio: f32, first_time:bool) {
+
+    let len = spectrum.len();
+    let twopi = 2.0 * std::f32::consts::PI;
+    for (i, (s, prev_angle)) in spectrum.iter_mut().zip(angles.iter_mut()).enumerate() {
+        let t = twopi * i as f32 / len as f32 ;
+
+        let s_mag = s.norm_sqr();
+        let s_angle = s.re.atan2(s.im);
+
+        let s_unwrap = {
+            let wrapped = (s_angle - *prev_angle) - t;
+            let unwrapped = wrapped - (wrapped / twopi).round() * twopi;
+            (unwrapped + t) * hop_ratio
+        };
+        let final_angle = {
+            if first_time {
+                s_angle
+            } else {
+                s_angle + s_unwrap
+            }
+        };
+        s.re = final_angle.cos() * s_mag;
+        s.im = final_angle.sin() * s_mag;
+
+        *prev_angle = final_angle;
+    }
+}
+
+/// Grows `spectrum` to `target_len` bins by spreading zero bins evenly
+/// between the original ones, instead of appending them all after the
+/// highest original bin.
+fn interleave_with_zero_bins(spectrum: &[Complex<f32>], target_len: usize) -> Vec<Complex<f32>> {
+    let orig_len = spectrum.len();
+    let mut result = Vec::with_capacity(target_len);
+
+    let n_zero = target_len - orig_len;
+    let zero_step = n_zero as f32 / orig_len as f32;
+    let mut zero_acc = 0.0;
+
+    for bin in spectrum {
+        result.push(*bin);
+        zero_acc += zero_step;
+        while zero_acc >= 1.0 && result.len() < target_len {
+            result.push(Complex::zero());
+            zero_acc -= 1.0;
+        }
+    }
+    while result.len() < target_len {
+        result.push(Complex::zero());
+    }
+
+    result
 }
 
 /// A peak bin magnitude below this fraction of full scale is treated as
