@@ -37,9 +37,8 @@ pub(crate) fn shift_pitch_window(
             samples: samples.to_vec()
         };
     }
-    // TODO: Phase shifting to avoid artifacts
-
-    // spectrum_phase_match(&mut spectrum, angle_buffer, hop_ratio, false);
+    
+    spectrum_phase_match(&mut spectrum, angle_buffer, hop_ratio, false);
     // TOODO: Lowpass filter to remove artifacts 
 
     let target_len = synth_len / 2 + 1;
@@ -78,8 +77,8 @@ fn spectrum_phase_match(spectrum:  &mut [Complex<f32>],  angles: &mut[f32], hop_
     for (i, (s, prev_angle)) in spectrum.iter_mut().zip(angles.iter_mut()).enumerate() {
         let t = twopi * i as f32 / len as f32 ;
 
-        let s_mag = s.norm_sqr();
-        let s_angle = s.re.atan2(s.im);
+        let s_mag = s.norm();
+        let s_angle = s.im.atan2(s.re);
 
         let s_unwrap = {
             let wrapped = (s_angle - *prev_angle) - t;
