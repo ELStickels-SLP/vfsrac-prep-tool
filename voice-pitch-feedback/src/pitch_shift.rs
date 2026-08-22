@@ -13,7 +13,8 @@ pub(crate) fn shift_pitch_window(
     sample_rate: u32,
     analysis_win_length: usize,
     pitch_amount_hz: f32,
-    angle_buffer: &mut [f32]
+    angle_buffer: &mut [f32],
+    first_time: bool,
 ) -> PitchShiftResult {
     let hz_ratio = (sample_rate as f32) / analysis_win_length as f32;
 
@@ -31,14 +32,14 @@ pub(crate) fn shift_pitch_window(
     let synth_len = (analysis_win_length as f32 * hop_ratio).round() as usize;
 
     // early out if we don't find anything useful
-    if peak_freq < 50. || hop_ratio < 1. || synth_len < 40  {
+    if peak_freq < 30. || hop_ratio < 1. || synth_len < 2  {
         return PitchShiftResult {
             peak_freq: -1.,
             samples: samples.to_vec()
         };
     }
     
-    spectrum_phase_match(&mut spectrum, angle_buffer, hop_ratio, false);
+    spectrum_phase_match(&mut spectrum, angle_buffer, hop_ratio, first_time);
     // TOODO: Lowpass filter to remove artifacts 
 
     let target_len = synth_len / 2 + 1;
@@ -129,7 +130,7 @@ fn interleave_with_zero_bins(spectrum: &[Complex<f32>], target_len: usize) -> Ve
 /// noise floor rather than a real tone. `rfft` is unnormalized, so the
 /// magnitude is divided by `spectrum.len() - 1` (~ half the window
 /// length) first to get a window-length-independent amplitude estimate.
-const MIN_PEAK_AMPLITUDE: f32 = 0.01;
+const MIN_PEAK_AMPLITUDE: f32 = 0.001;
 
 /// Finds the dominant frequency in `spectrum` (skipping the DC bin at index 0).
 /// Returns -1 if the spectrum doesn't have enough energy for the peak to be

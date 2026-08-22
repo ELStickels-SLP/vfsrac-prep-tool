@@ -86,7 +86,15 @@ fn shift_pitch_window_doubles_the_detected_pitch() {
 
         // Setting pitch_amount_hz == the detected pitch makes
         // ratio = (peak + amount) / peak == 2.0.
-        let result = shift_pitch_window(&samples, SAMPLE_RATE, WINDOW_LEN, TEST_HZ_RAISE);
+        let mut angle_buffer = vec![0.0; WINDOW_LEN];
+        let result = shift_pitch_window(
+            &samples,
+            SAMPLE_RATE,
+            WINDOW_LEN,
+            TEST_HZ_RAISE,
+            &mut angle_buffer,
+            true,
+        );
 
         assert_eq!(
             result.peak_freq, test_freq_hz,
@@ -127,8 +135,26 @@ fn shift_pitch_window_preserves_a_perfect_fifth() {
     // so the spectrum passes through unchanged). It doesn't matter which
     // of the two equal-amplitude tones gets detected: setting
     // pitch_amount_hz to that value always gives ratio == 2.0.
-    let detected_hz = shift_pitch_window(&chord, SAMPLE_RATE, WINDOW_LEN, 0.0).peak_freq;
-    let result = shift_pitch_window(&chord, SAMPLE_RATE, WINDOW_LEN, detected_hz);
+    let mut angle_buffer = vec![0.0; WINDOW_LEN];
+    let detected_hz = shift_pitch_window(
+        &chord,
+        SAMPLE_RATE,
+        WINDOW_LEN,
+        0.0,
+        &mut angle_buffer,
+        true,
+    )
+    .peak_freq;
+
+    let mut angle_buffer = vec![0.0; WINDOW_LEN];
+    let result = shift_pitch_window(
+        &chord,
+        SAMPLE_RATE,
+        WINDOW_LEN,
+        detected_hz,
+        &mut angle_buffer,
+        true,
+    );
 
     let out_spectrum = rfft(&result.samples[..WINDOW_LEN]);
     let low_out_hz = peak_freq_near(&out_spectrum, 2.0 * low_hz);

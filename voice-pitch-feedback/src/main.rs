@@ -22,7 +22,8 @@ mod pitch_shift;
 
 use pitch_processor::PitchProcessor;
 
-static ANALYSIS_WIN_LENGTH: usize = 1500;
+static ANALYSIS_WIN_LENGTH_OPTIONS: [usize; 6] = [250, 500, 1000, 1500, 2000, 3000];
+static DEFAULT_ANALYSIS_WIN_LENGTH: usize = 1500;
 static PITCHLINE_SAMPLES: usize = 1500;
 const PITCH_HISTOGRAM_INTERVAL: f64 = 1.0 / 30.0;
 
@@ -32,27 +33,16 @@ static VERSION: &str = match option_env!("VFSRAC_VERSION") {
     None => "local",
 };
 
-// Second-largest/smallest rather than the extremes: the largest sample rate
-// and smallest num_frames tend to be backend-reported edge values that
-// underperform on real hardware.
-fn second_largest(values: &[u32]) -> Option<u32> {
+// Middle value rather than the largest sample rate: the largest tends to be
+// a backend-reported edge value that underperforms on real hardware.
+fn middle(values: &[u32]) -> Option<u32> {
     let mut sorted = values.to_vec();
     sorted.sort_unstable();
     sorted.dedup();
-    sorted
-        .iter()
-        .rev()
-        .nth(1)
-        .copied()
-        .or(sorted.last().copied())
+    sorted.get(sorted.len() / 2).copied()
 }
 
-fn second_smallest(values: &[u32]) -> Option<u32> {
-    let mut sorted = values.to_vec();
-    sorted.sort_unstable();
-    sorted.dedup();
-    sorted.get(1).or(sorted.first()).copied()
-}
+
 
 fn main() {
     let native_options = eframe::NativeOptions::default();
@@ -69,6 +59,8 @@ struct NeoAudioEguiExample {
     sender: Option<Sender<pitch_processor::PitchMessage>>,
     audio_running: bool,
     config: DeviceConfig,
+    analysis_win_length: usize,
+    applied_analysis_win_length: usize,
     ui_sender: Sender<UiMessage>,
     ui_receiver: Receiver<UiMessage>,
     pitch_level: SmoothValue,
@@ -92,10 +84,10 @@ impl NeoAudioEguiExample {
 
         let backend = neo_audio.backend();
         let mut config = backend.config();
-        if let Some(sample_rate) = second_largest(&backend.available_sample_rates()) {
+        if let Some(sample_rate) = middle(&backend.available_sample_rates()) {
             config.sample_rate = sample_rate;
         }
-        if let Some(num_frames) = second_smallest(&backend.available_num_frames()) {
+        if let Some(num_frames) = middle(&backend.available_num_frames()) {
             config.num_frames = num_frames;
         }
         let config = neo_audio.backend_mut().set_config(&config).unwrap();
@@ -104,6 +96,8 @@ impl NeoAudioEguiExample {
             audio_running: false,
             sender: None,
             config,
+            analysis_win_length: DEFAULT_ANALYSIS_WIN_LENGTH,
+            applied_analysis_win_length: DEFAULT_ANALYSIS_WIN_LENGTH,
             neo_audio,
             ui_sender,
             ui_receiver,
@@ -227,6 +221,19 @@ impl eframe::App for NeoAudioEguiExample {
                             );
                         }
                     });
+
+                // Analysis Window Length
+                egui::ComboBox::from_label("Analysis Window Length")
+                    .selected_text(self.analysis_win_length.to_string())
+                    .show_ui(ui, |ui| {
+                        for win_length in ANALYSIS_WIN_LENGTH_OPTIONS {
+                            ui.selectable_value(
+                                &mut self.analysis_win_length,
+                                win_length,
+                                win_length.to_string(),
+                            );
+                        }
+                    });
             });
 
             let pitch_slider = ui.add(
@@ -240,7 +247,9 @@ impl eframe::App for NeoAudioEguiExample {
                 }
             }
 
-            if self.config != backend.config() {
+            if self.config != backend.config()
+                || self.analysis_win_length != self.applied_analysis_win_length
+            {
                 if self.audio_running {
                     self.neo_audio.stop_audio().unwrap();
                     self.audio_running = false;
@@ -251,6 +260,7 @@ impl eframe::App for NeoAudioEguiExample {
                     .backend_mut()
                     .set_config(&self.config)
                     .unwrap();
+                self.applied_analysis_win_length = self.analysis_win_length;
             }
 
             #[allow(clippy::collapsible_else_if)]
@@ -266,7 +276,7 @@ impl eframe::App for NeoAudioEguiExample {
                         self.neo_audio
                             .start_audio(PitchProcessor::new(
                                 self.config.sample_rate,
-                                ANALYSIS_WIN_LENGTH,
+                                self.analysis_win_length,
                                 self.ui_sender.clone(),
                             ))
                             .unwrap(),
