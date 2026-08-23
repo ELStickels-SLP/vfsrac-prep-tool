@@ -31,6 +31,12 @@ export RUSTFLAGS="-C target-feature=+crt-static"
 
 export VFSRAC_VERSION="$GITHUB_REF_NAME"
 
+# Git for Windows ships its own link.exe (a symlink shim) in usr/bin. On
+# GitHub's windows-latest runner, running this script via `shell: bash`
+# puts that dir ahead of the MSVC link.exe that ilammy/msvc-dev-cmd added
+# to PATH, so rustc picks up Git's link.exe instead and fails to link.
+export PATH="$(echo "$PATH" | sed -e 's|:/c/Program Files/Git/usr/bin||' -e 's|/c/Program Files/Git/usr/bin:||')"
+
 # Build
 cargo build --release --target "$target" -p voice-pitch-feedback
 
