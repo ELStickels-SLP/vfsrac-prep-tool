@@ -9,6 +9,19 @@ builds and runs just that app. Passing `voice-pitch-feedback` as a trailing
 arg does nothing useful — `cargo run`'s positional args go to the program
 itself, not to package selection.
 
+The `pitch_shift` phase-vocoder logic (`shift_pitch_window`) lives in the
+`crates/pitch-shift` library, shared by:
+
+- **`voice-pitch-feedback`** — the realtime GUI app.
+- **`voice-pitch-offline`** — a CLI that pitch-shifts a WAV file on disk
+  (`cargo run -p voice-pitch-offline -- <input.wav> <output.wav> --pitch-hz
+  <hz>`). It isn't in `default-members` since it isn't the app's `cargo
+  run` target; build/run it with `-p voice-pitch-offline` explicitly.
+
+`pitch-shift` has no GUI dependencies (it reimplements the one `egui::remap`
+helper it needed) so it's safe for the CLI to depend on without pulling in
+`eframe`.
+
 ## Audio backend selection
 
 `voice-pitch-feedback` selects its `neo-audio` backend per target platform

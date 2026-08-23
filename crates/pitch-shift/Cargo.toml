@@ -1,0 +1,12 @@
+[package]
+name = "pitch-shift"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish = false
+description = "Phase-vocoder pitch shifting shared by the realtime and offline apps"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+oxifft = { workspace = true, features = ["signal"] }

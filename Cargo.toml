@@ -1,9 +1,11 @@
 [workspace]
 members = [
   "crates/neo-audio",
+  "crates/pitch-shift",
   "crates/realtime-tools",
 
   "voice-pitch-feedback",
+  "voice-pitch-offline",
 ]
 # `cargo build`/`run` without `-p` only builds the app, not every workspace
 # member. Building `neo-audio` on its own (as opposed to as a dependency)
@@ -40,12 +42,16 @@ opt-level = 0
 
 [workspace.dependencies]
 neo-audio = { path = "crates/neo-audio", default-features = false }
+pitch-shift = { path = "crates/pitch-shift" }
 realtime-tools = { path = "crates/realtime-tools" }
 
+clap = "4.5.0"
 cpal = "0.15.3"
 crossbeam-channel = "0.5.13"
 easer = "0.3.0"
+hound = "3.5.1"
 ndarray = "0.16.1"
+oxifft = "0.3.0"
 ringbuf = "0.4.7"
 rtaudio = "0.3.3"
 serde = "1.0.215"

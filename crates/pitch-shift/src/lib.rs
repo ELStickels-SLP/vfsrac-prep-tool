@@ -1,14 +1,13 @@
-use eframe::egui::remap;
 use oxifft::{Complex, irfft, rfft};
 
-pub(crate) struct PitchShiftResult {
-    pub(crate) peak_freq: f32,
-    pub(crate) samples: Vec<f32>,
+pub struct PitchShiftResult {
+    pub peak_freq: f32,
+    pub samples: Vec<f32>,
 }
 
 /// Analyzes one window of `samples`, finds the fundamental frequency, and
 /// Creates a new window of samples extended in time to shift the pitch by `pitch_amount_hz`.
-pub(crate) fn shift_pitch_window(
+pub fn shift_pitch_window(
     samples: &[f32],
     sample_rate: u32,
     analysis_win_length: usize,
@@ -38,9 +37,9 @@ pub(crate) fn shift_pitch_window(
             samples: samples.to_vec()
         };
     }
-    
+
     spectrum_phase_match(&mut spectrum, angle_buffer, hop_ratio, first_time);
-    // TOODO: Lowpass filter to remove artifacts 
+    // TOODO: Lowpass filter to remove artifacts
 
     let target_len = synth_len / 2 + 1;
     spectrum = interleave_with_zero_bins(&spectrum, target_len);
@@ -54,7 +53,7 @@ pub(crate) fn shift_pitch_window(
     // Interpolate samples to squeeze back into output
     for i in 0..analysis_win_length {
         let t = i as f32 / analysis_win_length as f32;
-        let sample_idx = remap(t, 0.0..=1.0, 0.0..=synth_len as f32);
+        let sample_idx = remap(t, 0.0, 1.0, 0.0, synth_len as f32);
         let frac = sample_idx % 1.0;
         let whole = sample_idx.floor() as usize;
 
@@ -69,6 +68,11 @@ pub(crate) fn shift_pitch_window(
         peak_freq,
         samples: output,
     }
+}
+
+fn remap(x: f32, from_lo: f32, from_hi: f32, to_lo: f32, to_hi: f32) -> f32 {
+    let t = (x - from_lo) / (from_hi - from_lo);
+    to_lo + t * (to_hi - to_lo)
 }
 
 fn spectrum_phase_match(spectrum:  &mut [Complex<f32>],  angles: &mut[f32], hop_ratio: f32, first_time:bool) {

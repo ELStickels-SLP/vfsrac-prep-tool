@@ -4,7 +4,8 @@ use neo_audio::prelude::*;
 use neo_audio::processors::player::Sender;
 use realtime_tools::smooth_value::{Easing, Linear, SmoothValue};
 
-use crate::pitch_shift::{shift_pitch_window, PitchShiftResult};
+use pitch_shift::{shift_pitch_window, PitchShiftResult};
+
 use crate::UiMessage;
 
 pub enum PitchMessage {
