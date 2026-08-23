@@ -4,6 +4,19 @@ Rust tool to provide pitch raised auditory biofeedback as part of pre-operative 
 to run, use 
 `cargo run --release`
 
+### Offline CLI
+
+`voice-pitch-offline` pitch-shifts a WAV file on disk instead of running
+live through an audio device. It's not the default `cargo run` target, so
+build/run it with `-p`:
+
+```
+cargo run --release -p voice-pitch-offline -- <input.wav> <output.wav> --pitch-hz <hz>
+```
+
+Run `cargo run -p voice-pitch-offline -- --help` for the full option list
+(including `--window` to change the analysis window length).
+
 ### Windows prerequisites
 
 - [CMake](https://cmake.org/download/) on `PATH`
