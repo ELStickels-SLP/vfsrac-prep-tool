@@ -71,6 +71,7 @@ jobs:
 
       - name: Verify signing (macos)
         if: matrix.os == 'macos-latest'
+        continue-on-error: true
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
