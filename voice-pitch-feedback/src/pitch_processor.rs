@@ -24,11 +24,9 @@ pub struct PitchProcessor {
     // // Streaming buffers
     input_buffer: VecDeque<f32>,
     output_buffer: VecDeque<f32>,
-    // input_write_idx: usize,
-    // output_read_idx: usize,
-    // output_write_idx: usize,
+    angle_buffer: Vec<f32>,
+    first_window: bool,
     ui_sender: Sender<UiMessage>,
-    process_call_count: u32,
 }
 
 impl PitchProcessor {
@@ -45,8 +43,9 @@ impl PitchProcessor {
             // win_f,
             input_buffer: VecDeque::<f32>::new(),
             output_buffer: VecDeque::<f32>::new(),
+            angle_buffer: vec![0.0; buffer_size],
+            first_window: true,
             ui_sender,
-            process_call_count: 0,
         }
     }
 }
@@ -103,10 +102,14 @@ impl PitchProcessor {
             self.sample_rate,
             self.analysis_win_length,
             pitch_amount_hz,
+            &mut self.angle_buffer[..self.analysis_win_length],
+            self.first_window,
         );
+        self.first_window = false;
 
         // Send the pitch to the screen
         self.ui_sender.send(UiMessage::Level(peak_freq)).unwrap();
+        self.ui_sender.send(UiMessage::WindowProcessed).unwrap();
 
         for s in shifted {
             self.output_buffer.push_back(s);

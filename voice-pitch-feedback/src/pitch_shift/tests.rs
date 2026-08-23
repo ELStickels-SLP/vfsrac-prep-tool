@@ -6,6 +6,7 @@ const SAMPLE_RATE: u32 = 48_000;
 // tones landing on round multiples of 10 Hz sit dead-center on a bin.
 const WINDOW_LEN: usize = 4800;
 const HZ_RATIO: f32 = SAMPLE_RATE as f32 / WINDOW_LEN as f32;
+const TEST_HZ_RAISE: f32 = 70.;
 
 // The spectral stretch copies each input bin into its nearest output
 // bin with no interpolation, so several adjacent output bins can end up
@@ -15,6 +16,7 @@ const HZ_RATIO: f32 = SAMPLE_RATE as f32 / WINDOW_LEN as f32;
 // wrong-ratio bug would miss by much more than that.
 const PEAK_TOLERANCE_HZ: f32 = 2.0 * HZ_RATIO;
 const PEAK_TOLERANCE_BINS: usize = 2;
+
 
 /// Generates a bin-aligned test tone.
 ///
@@ -61,6 +63,21 @@ fn peak_freq_near(spectrum: &[oxifft::Complex<f32>], target_hz: f32) -> f32 {
 }
 
 #[test]
+fn dominant_freq_finds_a_pure_tone() {
+    for test_freq_hz in [110.0_f32, 220.0, 330.0, 440.0] {
+        let samples = tone(test_freq_hz, WINDOW_LEN);
+
+        let detected_hz = dominant_freq(&samples);
+
+        assert!(
+            (detected_hz - test_freq_hz).abs() <= PEAK_TOLERANCE_HZ,
+            "dominant frequency of a {test_freq_hz} Hz pure tone should land near \
+             {test_freq_hz} Hz (got {detected_hz} Hz)"
+        );
+    }
+}
+
+#[test]
 fn shift_pitch_window_doubles_the_detected_pitch() {
     // Permutations of input tone, all below the 500 Hz octave-downshift
     // threshold so `peak_freq` reflects the fundamental unmodified.
@@ -69,7 +86,15 @@ fn shift_pitch_window_doubles_the_detected_pitch() {
 
         // Setting pitch_amount_hz == the detected pitch makes
         // ratio = (peak + amount) / peak == 2.0.
-        let result = shift_pitch_window(&samples, SAMPLE_RATE, WINDOW_LEN, test_freq_hz);
+        let mut angle_buffer = vec![0.0; WINDOW_LEN];
+        let result = shift_pitch_window(
+            &samples,
+            SAMPLE_RATE,
+            WINDOW_LEN,
+            TEST_HZ_RAISE,
+            &mut angle_buffer,
+            true,
+        );
 
         assert_eq!(
             result.peak_freq, test_freq_hz,
@@ -82,7 +107,7 @@ fn shift_pitch_window_doubles_the_detected_pitch() {
         );
 
         let shifted_peak_hz = dominant_freq(&result.samples);
-        let expected_hz = 2.0 * test_freq_hz;
+        let expected_hz = test_freq_hz + TEST_HZ_RAISE;
         assert!(
             (shifted_peak_hz - expected_hz).abs() <= PEAK_TOLERANCE_HZ,
             "re-analyzed pitch of the shifted output for a {test_freq_hz} Hz input tone \
@@ -110,8 +135,26 @@ fn shift_pitch_window_preserves_a_perfect_fifth() {
     // so the spectrum passes through unchanged). It doesn't matter which
     // of the two equal-amplitude tones gets detected: setting
     // pitch_amount_hz to that value always gives ratio == 2.0.
-    let detected_hz = shift_pitch_window(&chord, SAMPLE_RATE, WINDOW_LEN, 0.0).peak_freq;
-    let result = shift_pitch_window(&chord, SAMPLE_RATE, WINDOW_LEN, detected_hz);
+    let mut angle_buffer = vec![0.0; WINDOW_LEN];
+    let detected_hz = shift_pitch_window(
+        &chord,
+        SAMPLE_RATE,
+        WINDOW_LEN,
+        0.0,
+        &mut angle_buffer,
+        true,
+    )
+    .peak_freq;
+
+    let mut angle_buffer = vec![0.0; WINDOW_LEN];
+    let result = shift_pitch_window(
+        &chord,
+        SAMPLE_RATE,
+        WINDOW_LEN,
+        detected_hz,
+        &mut angle_buffer,
+        true,
+    );
 
     let out_spectrum = rfft(&result.samples[..WINDOW_LEN]);
     let low_out_hz = peak_freq_near(&out_spectrum, 2.0 * low_hz);

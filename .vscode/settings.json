@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.debug.engine": "vadimcn.vscode-lldb",
+    "rust-analyzer.lens.enable": true,
+    "rust-analyzer.lens.debug.enable": true
+}

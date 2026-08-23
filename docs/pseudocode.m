@@ -16,7 +16,7 @@ player = audioDeviceWriter('SampleRate',Fs, ... % object (System object)
 'BufferSize',512);
 setup(player,zeros(reader.SamplesPerFrame,readerInfo.NumChannels)); % zeros(...) here: matrix (samples x channels)
 unwrapdata = 2*pi*AnalysisLen*(0:WindowLen-1)'/WindowLen; % vector
-yangle = zeros(WindowLen,1); % vector
+s_angle = zeros(WindowLen,1); % vector
 firsttime = true; % scalar (boolean)
 logger = dsp.SignalSink(); % object (System object)
 while ~isDone(reader)
@@ -27,21 +27,22 @@ while ~isDone(reader)
     % ST-FFT
     yfft = stft(y); % vector (complex)
     % Convert complex FFT data to magnitude and phase.
-    ymag = abs(yfft); % vector
-    yprevangle = yangle; % vector
-    yangle = angle(yfft); % vector
+    ymag = abs(yfft); % vector\
+    yprevangle = s_angle; % vector
+    s_angle = angle(yfft); % vector
+
     % Synthesis Phase Calculation
     % The synthesis phase is calculated by computing the phase increments
     % between successive frequency transforms, unwrapping them, and scaling
     % them by the ratio between the analysis and synthesis hop sizes.
-    yunwrap = (yangle - yprevangle) - unwrapdata; % vector
-    yunwrap = yunwrap - round(yunwrap/(2*pi))*2*pi; % vector
-    yunwrap = (yunwrap + unwrapdata) * Hopratio; % vector
+    s_unwrap = (s_angle - yprevangle) - unwrapdata; % vector
+    s_unwrap = s_unwrap - round(s_unwrap/(2*pi))*2*pi; % vector
+    s_unwrap = (s_unwrap + unwrapdata) * Hopratio; % vector
     if firsttime
-        ysangle = yangle; % vector
+        ysangle = s_angle; % vector
         firsttime = false; % scalar (boolean)
     else
-        ysangle = ysangle + yunwrap; % vector
+        ysangle = ysangle + s_unwrap; % vector
     enda
     % Convert magnitude and phase to complex numbers.
     ys = ymag .* complex(cos(ysangle), sin(ysangle)); % vector (comple`x)
