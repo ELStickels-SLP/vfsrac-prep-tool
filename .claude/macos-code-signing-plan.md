@@ -2,11 +2,12 @@
 
 Status: Apple Developer Program account created, awaiting verification.
 CI wiring (step 6 below) is implemented in
-[.github/workflows/release.yml](../.github/workflows/release.yml) and is a
-no-op until the secrets it references exist (guarded by
-`secrets.BUILD_CERTIFICATE_BASE64 != ''`), so unsigned builds keep working
-today. Remaining work is entirely account/secrets setup (steps 1-5) plus the
-final verification pass (step 7).
+[.github/workflows/release.yml](../.github/workflows/release.yml), calling
+[.github/scripts/sign-macos.sh](../.github/scripts/sign-macos.sh), which
+checks `BUILD_CERTIFICATE_BASE64`/`P12_PASSWORD` itself and exits early,
+unsigned, when they're absent - so unsigned builds keep working today.
+Remaining work is entirely account/secrets setup (steps 1-5) plus the final
+verification pass (step 7).
 
 Reference: https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications
 
@@ -62,8 +63,6 @@ Two separate things are needed:
    GitHub doc linked above):
    - `BUILD_CERTIFICATE_BASE64` — `base64 -i cert.p12 | pbcopy`
    - `P12_PASSWORD` — the export password from step 3
-   - `KEYCHAIN_PASSWORD` — any throwaway password, used only to protect the
-     temporary CI keychain for the duration of the job
    - `APPLE_SIGNING_IDENTITY` — the certificate's full common name, e.g.
      `Developer ID Application: <name> (<team id>)` (find via
      `security find-identity -v -p codesigning` once the cert is imported
@@ -90,18 +89,25 @@ Two separate things are needed:
      `PlistBuddy`, since `cargo bundle` has no config surface for arbitrary
      plist keys. The app isn't sandboxed, so no entitlements plist beyond
      hardened runtime is needed.
-   - "Import signing certificate (macos)" — gated on
-     `secrets.BUILD_CERTIFICATE_BASE64 != ''`. Imports the `.p12` into a
-     temporary keychain (`security create-keychain`, `security import`,
-     `security list-keychains`, `security set-key-partition-list`).
-   - "Code sign .app (macos)" — same gate.
-     `codesign --deep --force --options runtime --sign "$SIGNING_IDENTITY" "$app"`,
-     where `SIGNING_IDENTITY` is a new secret, `APPLE_SIGNING_IDENTITY`
-     (the full string `Developer ID Application: <name> (<team id>)`) —
-     added instead of hardcoding the identity in the workflow.
-   - "Notarize .app (macos)" — same gate. Zips the app, runs
-     `xcrun notarytool submit ... --wait` with the App Store Connect API
-     key, then `xcrun stapler staple` on success.
+   - "Sign and notarize .app (macos)" — runs
+     [sign-macos.sh](../.github/scripts/sign-macos.sh), which exits early
+     (unsigned) if `BUILD_CERTIFICATE_BASE64`/`P12_PASSWORD` aren't set, and
+     fails loudly rather than silently skipping if notarization secrets are
+     only partially set. When credentials are present: imports the `.p12`
+     into a temporary keychain (`security create-keychain`, `security
+     import`, `security list-keychains`, `security set-key-partition-list`),
+     asserts a Developer ID identity actually came out of the import, signs
+     with `codesign --deep --force --options runtime --sign
+     "$APPLE_SIGNING_IDENTITY" "$app"`, then notarizes via `xcrun notarytool
+     submit ... --wait` and `xcrun stapler staple`.
+   - "Verify signing (macos)" — runs
+     [verify-macos-signing.sh](../.github/scripts/verify-macos-signing.sh),
+     which asserts the built app is actually signed by
+     `APPLE_SIGNING_IDENTITY` (not merely that the prior step exited 0) and
+     validates the staple when notarization credentials were supplied. This
+     exists because a signing step silently degrading to unsigned/ad-hoc on
+     some path, without failing the job, is exactly the failure mode that
+     ships an artifact Gatekeeper then refuses.
    - "Package .app (macos)" — always runs (the pre-existing `ditto` step,
      now separated out so it runs after stapling regardless of whether
      signing was gated off).
