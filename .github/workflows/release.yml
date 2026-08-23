@@ -47,9 +47,42 @@ jobs:
         run: .github/scripts/build-linux.sh ${{ matrix.target }} ${{ matrix.artifact }}
 
       - name: Build (windows)
+        # Do not run this step under bash. Git for Windows includes its own
+        # link.exe in usr/bin. Under bash, that link.exe comes before the
+        # MSVC link.exe on PATH. Rustc then finds the wrong link.exe and the
+        # link step fails.
+        if: matrix.os == 'windows-latest'
+        env:
+          # cmake-rs picks a "Visual Studio NN" generator by itself. It
+          # fails on VS versions it does not recognize yet (for example, VS
+          # 2026 "18.0" next to VS 2022 on windows-latest runners). The
+          # NMake Makefiles generator only needs cl.exe and nmake.exe on
+          # PATH. msvc-dev-cmd above adds them to PATH. This generator
+          # skips the version lookup.
+          CMAKE_GENERATOR: NMake Makefiles
+          # This explicit generator stops cmake-rs from forcing its usual
+          # flags. Without those flags, RtAudio's CMakeLists.txt changes
+          # the default debug flag "/MDd" to "/MTd" (static debug CRT).
+          # That does not match Rust's dynamic release CRT, and the link
+          # step fails with unresolved symbols such as _CrtDbgReport and
+          # _malloc_dbg. This toolchain file forces "/MD" instead. See
+          # .github/cmake/windows-crt.cmake for details.
+          CMAKE_TOOLCHAIN_FILE: ${{ github.workspace }}/.github/cmake/windows-crt.cmake
+          # This flag links the CRT statically. The built .exe then does
+          # not need the VC++ Redistributable (MSVCP140.dll,
+          # VCRUNTIME140.dll) on the target machine. This must match the
+          # static release CRT that windows-crt.cmake forces RtAudio to
+          # use above.
+          RUSTFLAGS: -C target-feature=+crt-static
+          VFSRAC_VERSION: ${{ github.ref_name }}
+        run: cargo build --release --target ${{ matrix.target }} -p voice-pitch-feedback
+
+      - name: Stage binary (windows)
         if: matrix.os == 'windows-latest'
         shell: bash
-        run: .github/scripts/build-windows.sh ${{ matrix.target }} ${{ matrix.artifact }}
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/voice-pitch-feedback.exe dist/${{ matrix.artifact }}
 
       - name: Build .app bundle (macos)
         if: matrix.os == 'macos-latest'
