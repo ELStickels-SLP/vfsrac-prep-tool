@@ -38,7 +38,7 @@ pub fn shift_pitch_window(
         };
     }
 
-    spectrum_phase_match(&mut spectrum, angle_buffer, hop_ratio, first_time);
+    // spectrum_phase_match(&mut spectrum, angle_buffer, hop_ratio, first_time);
     // TOODO: Lowpass filter to remove artifacts
 
     let target_len = synth_len / 2 + 1;
