@@ -12,11 +12,9 @@ pub enum PitchMessage {
 }
 
 pub struct PitchProcessor {
-    pitch_amount:f32,
-    sample_rate: u32,
     // // SLA algorithm parameters
     analysis_length: usize,
-    synthesis_length: usize,
+
     fft_length: usize,
     pitch_shifter: PitchShifter,
 
@@ -28,18 +26,15 @@ pub struct PitchProcessor {
 }
 
 impl PitchProcessor {
-    pub fn new(sample_rate: u32, analysis_length: usize, fft_length: usize, ui_sender: Sender<UiMessage>, target_pitch:f32, pitch_amount:f32) -> Self {
+    pub fn new(sample_rate: u32, analysis_length: usize, ui_sender: Sender<UiMessage>, target_pitch:f32, pitch_amount:f32) -> Self {
         let synthesis_length =
             (analysis_length as f32 * (target_pitch + pitch_amount) / target_pitch).round() as usize;
         
 
         Self {
-            pitch_amount,
-            analysis_length: 100,
-            sample_rate,
-            synthesis_length: 170,
+            analysis_length,
             fft_length: 2048,
-            pitch_shifter: PitchShifter::new(100, 170, 2048, sample_rate as usize),
+            pitch_shifter: PitchShifter::new(analysis_length, synthesis_length, 2048, sample_rate as usize),
 
             input_buffer: VecDeque::<f32>::new(),
             output_buffer: VecDeque::<f32>::new(),

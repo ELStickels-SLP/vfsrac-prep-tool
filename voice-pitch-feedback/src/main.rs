@@ -22,8 +22,8 @@ mod pitch_shifter;
 
 use pitch_processor::PitchProcessor;
 
-static ANALYSIS_WIN_LENGTH_OPTIONS: [usize; 6] = [250, 500, 1000, 1500, 2000, 3000];
-static DEFAULT_ANALYSIS_WIN_LENGTH: usize = 1500;
+static ANALYSIS_WIN_LENGTH_OPTIONS: [usize; 6] = [64, 100, 128, 200, 256, 512];
+static DEFAULT_ANALYSIS_WIN_LENGTH: usize = 100;
 static DEFAULT_TARGET_PITCH: f32 = 200.0;
 static DEFAULT_PITCH_AMOUNT: f32 = 70.0;
 
@@ -284,7 +284,6 @@ impl eframe::App for NeoAudioEguiExample {
                         self.neo_audio
                             .start_audio(PitchProcessor::new(
                                 self.config.sample_rate,
-                                self.analysis_win_length,
                                 self.analysis_win_length,
                                 self.ui_sender.clone(),
                                 self.target_pitch,
