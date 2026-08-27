@@ -9,17 +9,18 @@ description = "A voice app that changes pitch for biofeedback practice"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-eframe = "0.36"
+eframe = { version = "0.36", features = ["persistence"] }
 oxifft = { workspace = true, features = ["signal"] }
 pitch-shift = { workspace = true }
 realtime-tools = { workspace = true }
 egui_plot = "0.37"
+serde = { workspace = true, features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
-neo-audio = { workspace = true, default-features = false, features = ["processors", "rtaudio-backend"] }
+neo-audio = { workspace = true, default-features = false, features = ["processors", "rtaudio-backend", "serde"] }
 
 [target.'cfg(not(windows))'.dependencies]
-neo-audio = { workspace = true, default-features = false, features = ["processors", "portaudio-backend"] }
+neo-audio = { workspace = true, default-features = false, features = ["processors", "portaudio-backend", "serde"] }
 
 
 [package.metadata.bundle]

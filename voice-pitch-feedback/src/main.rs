@@ -29,6 +29,17 @@ static DEFAULT_PITCH_AMOUNT: f32 = 70.0;
 
 const PITCH_HISTOGRAM_INTERVAL: f64 = 1.0 / 30.0;
 
+// Key under which settings are saved/restored via eframe's storage.
+const SETTINGS_KEY: &str = "device_settings";
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PersistedSettings {
+    config: DeviceConfig,
+    analysis_win_length: usize,
+    pitch_amount: f32,
+    target_pitch: f32,
+}
+
 // Set by git tags or "local" if not set
 static VERSION: &str = match option_env!("VFSRAC_VERSION") {
     Some(v) => v,
@@ -77,9 +88,7 @@ struct NeoAudioEguiExample {
 }
 
 impl NeoAudioEguiExample {
-    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        // Customize egui here with cc.egui_ctx.set_fonts and cc.egui_ctx.set_visuals.
-        // Restore app state using cc.storage (requires the "persistence" feature).
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // Use the cc.gl (a glow::Context) to create graphics shaders and buffers that you can use
         // for e.g. egui::PaintCallback.
         let mut neo_audio = NeoAudio::<AudioBackendImpl>::new().unwrap();
@@ -95,23 +104,45 @@ impl NeoAudioEguiExample {
         if let Some(num_frames) = middle(&backend.available_num_frames()) {
             config.num_frames = num_frames;
         }
-        let config = neo_audio.backend_mut().set_config(&config).unwrap();
+
+        let mut analysis_win_length = DEFAULT_ANALYSIS_WIN_LENGTH;
+        let mut pitch_amount = DEFAULT_PITCH_AMOUNT;
+        let mut target_pitch = DEFAULT_TARGET_PITCH;
+        let mut restored_config = None;
+        if let Some(storage) = cc.storage {
+            if let Some(persisted) = eframe::get_value::<PersistedSettings>(storage, SETTINGS_KEY)
+            {
+                restored_config = Some(persisted.config);
+                analysis_win_length = persisted.analysis_win_length;
+                pitch_amount = persisted.pitch_amount;
+                target_pitch = persisted.target_pitch;
+            }
+        }
+
+        // Fall back to the computed defaults if the saved API/devices are no
+        // longer available, e.g. unplugged hardware or a different machine.
+        let config = match restored_config
+            .and_then(|restored| neo_audio.backend_mut().set_config(&restored).ok())
+        {
+            Some(applied) => applied,
+            None => neo_audio.backend_mut().set_config(&config).unwrap(),
+        };
 
         Self {
             audio_running: false,
             sender: None,
             config,
-            analysis_win_length: DEFAULT_ANALYSIS_WIN_LENGTH,
-            applied_analysis_win_length: DEFAULT_ANALYSIS_WIN_LENGTH,
+            analysis_win_length,
+            applied_analysis_win_length: analysis_win_length,
             neo_audio,
             ui_sender,
             ui_receiver,
             pitch_level,
             windows_processed: 0,
-            pitch_amount: DEFAULT_PITCH_AMOUNT,
-            applied_pitch_amount: DEFAULT_PITCH_AMOUNT,
-            target_pitch: DEFAULT_TARGET_PITCH,
-            applied_target_pitch: DEFAULT_TARGET_PITCH,
+            pitch_amount,
+            applied_pitch_amount: pitch_amount,
+            target_pitch,
+            applied_target_pitch: target_pitch,
             pitch_histogram: vec![-1.; 600],
             pitch_histogram_pos: 0,
             last_histogram_update: 0.0,
@@ -159,6 +190,19 @@ impl NeoAudioEguiExample {
 }
 
 impl eframe::App for NeoAudioEguiExample {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(
+            storage,
+            SETTINGS_KEY,
+            &PersistedSettings {
+                config: self.config.clone(),
+                analysis_win_length: self.analysis_win_length,
+                pitch_amount: self.pitch_amount,
+                target_pitch: self.target_pitch,
+            },
+        );
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         ui.ctx().set_pixels_per_point(2.0);
         egui::CentralPanel::default().show(ui, |ui| {
