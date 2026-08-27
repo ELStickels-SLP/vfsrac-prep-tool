@@ -18,6 +18,7 @@ use neo_audio::backends::rtaudio_backend::RtAudioBackend as AudioBackendImpl;
 
 mod level_meter;
 mod pitch_processor;
+mod pitch_shifter;
 
 use pitch_processor::PitchProcessor;
 

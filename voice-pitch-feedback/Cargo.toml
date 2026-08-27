@@ -10,6 +10,7 @@ description = "A voice app that changes pitch for biofeedback practice"
 
 [dependencies]
 eframe = "0.36"
+oxifft = { workspace = true, features = ["signal"] }
 pitch-shift = { workspace = true }
 realtime-tools = { workspace = true }
 egui_plot = "0.37"

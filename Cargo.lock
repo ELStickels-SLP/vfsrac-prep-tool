@@ -3882,6 +3882,7 @@ dependencies = [
  "eframe",
  "egui_plot",
  "neo-audio",
+ "oxifft",
  "pitch-shift",
  "realtime-tools",
 ]

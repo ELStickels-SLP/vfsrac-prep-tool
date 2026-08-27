@@ -6,6 +6,7 @@ use realtime_tools::smooth_value::{Easing, Linear, SmoothValue};
 
 use pitch_shift::{shift_pitch_window, PitchShiftResult};
 
+use crate::pitch_shifter::PitchShifter;
 use crate::UiMessage;
 
 pub enum PitchMessage {
@@ -13,39 +14,37 @@ pub enum PitchMessage {
 }
 
 pub struct PitchProcessor {
-    pitch_amount: SmoothValue,
+    pitch_amount:f32,
     sample_rate: u32,
     // // SLA algorithm parameters
-    analysis_win_length: usize,
-    // anls_hop_len: usize,
-    // synth_hop_len: usize,
-    // synth_win_len: usize,
-    // win_f: Vec<f32>,
+    analysis_length: usize,
+    synthesis_length: usize,
+    fft_length: usize,
+    pitch_shifter: PitchShifter,
 
+    
     // // Streaming buffers
     input_buffer: VecDeque<f32>,
     output_buffer: VecDeque<f32>,
-    angle_buffer: Vec<f32>,
-    first_window: bool,
     ui_sender: Sender<UiMessage>,
 }
 
 impl PitchProcessor {
-    pub fn new(sample_rate: u32, buffer_size: usize, ui_sender: Sender<UiMessage>) -> Self {
-        let analysis_win_length = buffer_size;
+    pub fn new(sample_rate: u32, analysis_length: usize, fft_length: usize, ui_sender: Sender<UiMessage>, target_pitch:f32, pitch_amount:f32) -> Self {
+        let synthesis_length =
+            (analysis_length as f32 * (target_pitch + pitch_amount) / target_pitch).round() as usize;
+        
 
         Self {
-            pitch_amount: SmoothValue::new(50.0, Linear::ease_in_out),
-            analysis_win_length,
+            pitch_amount,
+            analysis_length,
             sample_rate,
-            // anls_hop_len,
-            // synth_hop_len,
-            // synth_win_len,
-            // win_f,
+            synthesis_length,
+            fft_length,
+            pitch_shifter: PitchShifter::new(analysis_length, synthesis_length, fft_length),
+
             input_buffer: VecDeque::<f32>::new(),
             output_buffer: VecDeque::<f32>::new(),
-            angle_buffer: vec![0.0; buffer_size],
-            first_window: true,
             ui_sender,
         }
     }
@@ -55,10 +54,10 @@ impl AudioProcessor for PitchProcessor {
     type Message = PitchMessage;
 
     fn prepare(&mut self, config: DeviceConfig) {
-        self.output_buffer.reserve(self.analysis_win_length * 2);
-        self.input_buffer.reserve(self.analysis_win_length * 2);
+        self.output_buffer.reserve(self.analysis_length * 2);
+        self.input_buffer.reserve(self.analysis_length * 2);
 
-        for _ in 0..(self.analysis_win_length) {
+        for _ in 0..(self.analysis_length) {
             self.output_buffer.push_back(0.0);
         }
 
@@ -67,7 +66,7 @@ impl AudioProcessor for PitchProcessor {
 
     fn message_process(&mut self, message: PitchMessage) {
         match message {
-            PitchMessage::Pitch(pitch) => self.pitch_amount.set_target_value(pitch),
+            PitchMessage::Pitch(pitch) => // TODO: Void / null / ignore 
         }
     }
 
@@ -83,7 +82,8 @@ impl AudioProcessor for PitchProcessor {
             *o = self.output_buffer.pop_front().unwrap_or(0.0)
         }
 
-        if self.input_buffer.len() >= self.analysis_win_length {
+        // TODO: Keep 
+        if self.input_buffer.len() >= self.fft_length {
             self.process_window();
         }
     }
@@ -91,29 +91,21 @@ impl AudioProcessor for PitchProcessor {
 
 impl PitchProcessor {
     fn process_window(&mut self) {
-        // // tODO: real ring buffer
         let samples = self.input_buffer.make_contiguous();
-        let pitch_amount_hz = self.pitch_amount.next_value();
+        // let pitch_amount_hz = self.pitch_amount.next_value();
 
-        let PitchShiftResult {
-            peak_freq,
-            samples: shifted,
-        } = shift_pitch_window(
-            &samples[..self.analysis_win_length],
-            self.sample_rate,
-            self.analysis_win_length,
-            pitch_amount_hz,
-            &mut self.angle_buffer[..self.analysis_win_length],
-            self.first_window,
-        );
-        self.first_window = false;
+        let out = self.pitch_shifter.process(samples);
+        
+        self.pitch_shifter.first_time = false;
 
         // Send the pitch to the screen
-        self.ui_sender.send(UiMessage::Level(peak_freq)).unwrap();
+        // self.ui_sender.send(UiMessage::Level(peak_freq)).unwrap();
         self.ui_sender.send(UiMessage::WindowProcessed).unwrap();
 
-        for s in shifted {
-            self.output_buffer.push_back(s);
+
+        // Pop analysis_len out 
+        for s in out.iter() {
+            self.output_buffer.push_back(*s);
             self.input_buffer.pop_front();
         }
     }
