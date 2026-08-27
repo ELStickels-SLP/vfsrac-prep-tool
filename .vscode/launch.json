@@ -4,6 +4,24 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug voice-pitch-feedback",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=voice-pitch-feedback",
+                    "--package=voice-pitch-feedback"
+                ],
+                "filter": {
+                    "name": "voice-pitch-feedback",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug unit tests in pitch_shift.rs",
             "cargo": {
                 "args": [

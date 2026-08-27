@@ -11,18 +11,20 @@ pub struct PitchShifter {
     pub phi_syn: Vec<f32>,
     pub prev_synth: Vec<f32>,
     pub first_time: bool,
+    pub sample_rate: usize,
+    pub min_bins:usize,
 }
 
 impl PitchShifter {
-    pub fn new(n_anal: usize, n_synth: usize, n_fft: usize) -> Self {
+    pub fn new(n_anal: usize, n_synth: usize, n_fft: usize, sample_rate:usize) -> Self {
         let bins = n_fft / 2 + 1;
-        // unwrapdata = 2*pi*k*hop_size / n_fft
+        // unwrapdata = 2*pi*k*n_anal / n_fft (expected phase advance over one analysis hop)
         let mut unwrapdata = vec![0.0; bins];
-        let hop = n_synth as f32 / n_anal as f32;
         for k in 0..bins {
-            unwrapdata[k] = 2.0 * PI * k as f32 * hop / n_fft as f32;
+            unwrapdata[k] = 2.0 * PI * k as f32 * n_anal as f32 / n_fft as f32;
         }
         PitchShifter {
+            min_bins: bins,
             n_anal,
             n_synth,
             n_fft,
@@ -31,14 +33,16 @@ impl PitchShifter {
             phi_syn: vec![0.0; bins],
             prev_synth: vec![0.0; n_fft],
             first_time: true,
+            sample_rate
         }
     }
 
-    // in: fftlen + analysislen 
-    pub fn process(&mut self, s: &[f32]) -> Vec<f32> {
+    // in: fftlen + analysislen
+    pub fn process(&mut self, s: &[f32]) -> PitchShiftResult {
         // FFT (rfft)
         let sf = rfft(s);
         let bins = sf.len();
+        let peak_freq = peak_frequency(&sf, self.sample_rate as f32 / self.n_fft as f32);
 
         // Phase
         let mut phi = vec![0.0; bins];
@@ -107,7 +111,46 @@ impl PitchShifter {
         // Save phi for next iteration
         self.phi_prev.clone_from_slice(&phi);
 
-        out
+        PitchShiftResult {
+            samples: out,
+            peak_freq,
+        }
     }
 }
 
+pub struct PitchShiftResult {
+    pub samples: Vec<f32>,
+    pub peak_freq: f32,
+}
+
+
+/// A peak bin magnitude below this fraction of full scale is treated as
+/// noise floor rather than a real tone. `rfft` is unnormalized, so the
+/// magnitude is divided by `spectrum.len() - 1` (~ half the window
+/// length) first to get a window-length-independent amplitude estimate.
+const MIN_PEAK_AMPLITUDE: f32 = 0.001;
+
+/// Finds the dominant frequency in `spectrum` (skipping the DC bin at index 0).
+/// Returns -1 if the spectrum doesn't have enough energy for the peak to be
+/// meaningful (e.g. silence or noise floor).
+fn peak_frequency(spectrum: &[oxifft::Complex<f32>], hz_ratio: f32) -> f32 {
+    let (peak_idx, peak_bin) = spectrum
+        .iter()
+        .enumerate()
+        .skip(1)
+        .max_by(|(_, a), (_, b)| a.norm().total_cmp(&b.norm()))
+        .unwrap();
+
+    let amplitude = peak_bin.norm() / (spectrum.len() - 1) as f32;
+    if amplitude < MIN_PEAK_AMPLITUDE {
+        return -1.;
+    }
+    
+
+    let peak_freq = peak_idx as f32 * hz_ratio;
+    if peak_freq > 300. {
+        peak_freq / 2.
+    } else {
+        peak_freq
+    }
+}

@@ -4,9 +4,7 @@ use neo_audio::prelude::*;
 use neo_audio::processors::player::Sender;
 use realtime_tools::smooth_value::{Easing, Linear, SmoothValue};
 
-use pitch_shift::{shift_pitch_window, PitchShiftResult};
-
-use crate::pitch_shifter::PitchShifter;
+use crate::pitch_shifter::{PitchShifter, PitchShiftResult};
 use crate::UiMessage;
 
 pub enum PitchMessage {
@@ -37,11 +35,11 @@ impl PitchProcessor {
 
         Self {
             pitch_amount,
-            analysis_length,
+            analysis_length: 100,
             sample_rate,
-            synthesis_length,
-            fft_length,
-            pitch_shifter: PitchShifter::new(analysis_length, synthesis_length, fft_length),
+            synthesis_length: 170,
+            fft_length: 2048,
+            pitch_shifter: PitchShifter::new(100, 170, 2048, sample_rate as usize),
 
             input_buffer: VecDeque::<f32>::new(),
             output_buffer: VecDeque::<f32>::new(),
@@ -54,8 +52,8 @@ impl AudioProcessor for PitchProcessor {
     type Message = PitchMessage;
 
     fn prepare(&mut self, config: DeviceConfig) {
-        self.output_buffer.reserve(self.analysis_length * 2);
-        self.input_buffer.reserve(self.analysis_length * 2);
+        self.output_buffer.reserve(self.fft_length);
+        self.input_buffer.reserve(self.fft_length);
 
         for _ in 0..(self.analysis_length) {
             self.output_buffer.push_back(0.0);
@@ -64,11 +62,7 @@ impl AudioProcessor for PitchProcessor {
         println!("PitchProcessor prepare called with {:?}", config);
     }
 
-    fn message_process(&mut self, message: PitchMessage) {
-        match message {
-            PitchMessage::Pitch(pitch) => // TODO: Void / null / ignore 
-        }
-    }
+    fn message_process(&mut self, _message: PitchMessage) {}
 
     fn process(
         &mut self,
@@ -83,7 +77,7 @@ impl AudioProcessor for PitchProcessor {
         }
 
         // TODO: Keep 
-        if self.input_buffer.len() >= self.fft_length {
+        while self.input_buffer.len() >= self.fft_length {
             self.process_window();
         }
     }
@@ -91,22 +85,24 @@ impl AudioProcessor for PitchProcessor {
 
 impl PitchProcessor {
     fn process_window(&mut self) {
-        let samples = self.input_buffer.make_contiguous();
+        let samples = &self.input_buffer.make_contiguous()[..self.fft_length];
         // let pitch_amount_hz = self.pitch_amount.next_value();
 
-        let out = self.pitch_shifter.process(samples);
-        
-        self.pitch_shifter.first_time = false;
+        let PitchShiftResult { samples: out, peak_freq } = self.pitch_shifter.process(samples);
 
         // Send the pitch to the screen
-        // self.ui_sender.send(UiMessage::Level(peak_freq)).unwrap();
+        self.ui_sender.send(UiMessage::Level(peak_freq)).unwrap();
         self.ui_sender.send(UiMessage::WindowProcessed).unwrap();
 
-
-        // Pop analysis_len out 
+        // Pop analysis_len out
         for s in out.iter() {
             self.output_buffer.push_back(*s);
             self.input_buffer.pop_front();
         }
+
+        if (self.pitch_shifter.first_time) {
+            println!("First window succeeded")
+        }
+        self.pitch_shifter.first_time = false;
     }
 }

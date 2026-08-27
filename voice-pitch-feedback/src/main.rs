@@ -24,7 +24,9 @@ use pitch_processor::PitchProcessor;
 
 static ANALYSIS_WIN_LENGTH_OPTIONS: [usize; 6] = [250, 500, 1000, 1500, 2000, 3000];
 static DEFAULT_ANALYSIS_WIN_LENGTH: usize = 1500;
-static PITCHLINE_SAMPLES: usize = 1500;
+static DEFAULT_TARGET_PITCH: f32 = 200.0;
+static DEFAULT_PITCH_AMOUNT: f32 = 70.0;
+
 const PITCH_HISTOGRAM_INTERVAL: f64 = 1.0 / 30.0;
 
 // Set by git tags or "local" if not set
@@ -66,6 +68,9 @@ struct NeoAudioEguiExample {
     pitch_level: SmoothValue,
     windows_processed: u32,
     pitch_amount: f32,
+    applied_pitch_amount: f32,
+    target_pitch: f32,
+    applied_target_pitch: f32,
     pitch_histogram: Vec<f32>,
     pitch_histogram_pos: usize,
     last_histogram_update: f64,
@@ -103,7 +108,10 @@ impl NeoAudioEguiExample {
             ui_receiver,
             pitch_level,
             windows_processed: 0,
-            pitch_amount: 70.0,
+            pitch_amount: DEFAULT_PITCH_AMOUNT,
+            applied_pitch_amount: DEFAULT_PITCH_AMOUNT,
+            target_pitch: DEFAULT_TARGET_PITCH,
+            applied_target_pitch: DEFAULT_TARGET_PITCH,
             pitch_histogram: vec![-1.; 600],
             pitch_histogram_pos: 0,
             last_histogram_update: 0.0,
@@ -236,19 +244,17 @@ impl eframe::App for NeoAudioEguiExample {
                     });
             });
 
-            let pitch_slider = ui.add(
+            ui.add(
                 egui::Slider::new(&mut self.pitch_amount, 0.0..=100.0).text("Pitch Amount (Hz)"),
             );
-            if pitch_slider.changed() {
-                if let Some(sender) = &self.sender {
-                    sender
-                        .send(pitch_processor::PitchMessage::Pitch(self.pitch_amount))
-                        .unwrap();
-                }
-            }
+            ui.add(
+                egui::Slider::new(&mut self.target_pitch, 50.0..=500.0).text("Target Pitch (Hz)"),
+            );
 
             if self.config != backend.config()
                 || self.analysis_win_length != self.applied_analysis_win_length
+                || self.pitch_amount != self.applied_pitch_amount
+                || self.target_pitch != self.applied_target_pitch
             {
                 if self.audio_running {
                     self.neo_audio.stop_audio().unwrap();
@@ -261,6 +267,8 @@ impl eframe::App for NeoAudioEguiExample {
                     .set_config(&self.config)
                     .unwrap();
                 self.applied_analysis_win_length = self.analysis_win_length;
+                self.applied_pitch_amount = self.pitch_amount;
+                self.applied_target_pitch = self.target_pitch;
             }
 
             #[allow(clippy::collapsible_else_if)]
@@ -277,17 +285,15 @@ impl eframe::App for NeoAudioEguiExample {
                             .start_audio(PitchProcessor::new(
                                 self.config.sample_rate,
                                 self.analysis_win_length,
+                                self.analysis_win_length,
                                 self.ui_sender.clone(),
+                                self.target_pitch,
+                                self.pitch_amount,
                             ))
                             .unwrap(),
                     );
                     self.audio_running = true;
                     self.windows_processed = 0;
-                    if let Some(sender) = &self.sender {
-                        sender
-                            .send(pitch_processor::PitchMessage::Pitch(self.pitch_amount))
-                            .unwrap();
-                    }
                 }
             }
 
@@ -328,6 +334,7 @@ impl eframe::App for NeoAudioEguiExample {
                 ui.add(level_meter(0.0..=300.0, cur_level));
                 ui.label(format!("Level: {}hz", cur_level));
             });
+            ui.label(format!("Windows processed: {}", self.windows_processed));
 
             self.show_plot(ui, cur_level);
         });
