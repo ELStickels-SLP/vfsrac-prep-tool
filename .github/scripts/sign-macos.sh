@@ -77,7 +77,14 @@ case "$identities" in
 esac
 
 # Code sign .app
+#
+# --entitlements grants the hardened runtime microphone access
+# (com.apple.security.device.audio-input); without it, TCC silently denies
+# mic input in the signed build even though Info.plist's
+# NSMicrophoneUsageDescription is set.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 codesign --deep --force --options runtime \
+  --entitlements "$script_dir/voice-pitch-feedback.entitlements" \
   --keychain "$keychain_path" \
   --sign "$APPLE_SIGNING_IDENTITY" "$app"
 
