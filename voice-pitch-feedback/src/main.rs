@@ -27,6 +27,9 @@ use pitch_shift::{
 };
 
 const PITCH_HISTOGRAM_INTERVAL: f64 = 1.0 / 30.0;
+// Safe band and plot height, as a fraction of the target pitch.
+const SAFE_RANGE_FRACTION: f64 = 0.2;
+const PLOT_RANGE_FRACTION: f64 = 0.5;
 
 // Key under which settings are saved/restored via eframe's storage.
 const SETTINGS_KEY: &str = "device_settings";
@@ -166,11 +169,14 @@ impl NeoAudioEguiExample {
     }
     fn show_plot(&self, ui: &mut egui::Ui, current_pitch: f32) -> Response {
         let last_x = (self.pitch_histogram.len().saturating_sub(1)) as f64;
+        let target = self.target_pitch as f64;
+        let safe_min = target * (1.0 - SAFE_RANGE_FRACTION);
+        let safe_max = target * (1.0 + SAFE_RANGE_FRACTION);
         let filled_area = FilledArea::new(
-            "human pitch range",
+            "safe range",
             &[0.0, last_x],
-            &[100.0, 100.0],
-            &[200.0, 200.0],
+            &[safe_min, safe_min],
+            &[safe_max, safe_max],
         )
         .fill_color(egui::Color32::from_rgba_unmultiplied(100, 200, 100, 50));
 
@@ -194,8 +200,14 @@ impl NeoAudioEguiExample {
 
         Plot::new("Pitch range")
             .show(ui, |plot_ui| {
-                plot_ui.set_plot_bounds(PlotBounds::from_min_max([0.0, 0.0], [600.0, 300.0]));
+                plot_ui.set_plot_bounds(PlotBounds::from_min_max(
+                    [0.0, target * (1.0 - PLOT_RANGE_FRACTION)],
+                    [last_x, target * (1.0 + PLOT_RANGE_FRACTION)],
+                ));
                 plot_ui.add(filled_area);
+                plot_ui.hline(
+                    HLine::new("target", target).color(egui::Color32::from_rgb(60, 160, 60)),
+                );
                 plot_ui.hline(HLine::new("current", current_pitch));
                 for points in segments {
                     plot_ui.line(Line::new("pitch", points));
