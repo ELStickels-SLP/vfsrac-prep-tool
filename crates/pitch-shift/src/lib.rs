@@ -30,8 +30,8 @@ pub fn shift_pitch_window(
     sample_rate: u32,
     analysis_win_length: usize,
     pitch_amount_hz: f32,
-    angle_buffer: &mut [f32],
-    first_time: bool,
+    _angle_buffer: &mut [f32],
+    _first_time: bool,
 ) -> PitchShiftResult {
     let hz_ratio = (sample_rate as f32) / analysis_win_length as f32;
 
@@ -93,6 +93,7 @@ fn remap(x: f32, from_lo: f32, from_hi: f32, to_lo: f32, to_hi: f32) -> f32 {
     to_lo + t * (to_hi - to_lo)
 }
 
+#[allow(dead_code)]
 fn spectrum_phase_match(spectrum:  &mut [Complex<f32>],  angles: &mut[f32], hop_ratio: f32, first_time:bool) {
 
     let len = spectrum.len();
@@ -163,7 +164,7 @@ fn peak_frequency(spectrum: &[oxifft::Complex<f32>], hz_ratio: f32) -> f32 {
         .enumerate()
         .skip(1)
         .max_by(|(_, a), (_, b)| {
-            (&a.re).total_cmp(&b.re)
+            a.re.total_cmp(&b.re)
         })
         .unwrap();
 

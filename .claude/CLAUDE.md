@@ -29,6 +29,18 @@ longer used by either app; only its unit tests exercise it.
 helper it needed) so it's safe for the CLI to depend on without pulling in
 `eframe`.
 
+## Architecture
+
+See [architecture.md](architecture.md) for crate roles, the realtime data
+flow, and known gotchas.
+
+## Checks
+
+On Windows, run `cargo clippy -p voice-pitch-feedback -p voice-pitch-offline
+-p pitch-shift -p realtime-tools --all-targets` and `cargo test -p pitch-shift
+-p realtime-tools`. `--workspace` fails there (`neo-audio` defaults to
+`portaudio`). Keep clippy warning-free.
+
 ## Audio backend selection
 
 `voice-pitch-feedback` selects its `neo-audio` backend per target platform

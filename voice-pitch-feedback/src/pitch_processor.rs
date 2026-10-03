@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use neo_audio::prelude::*;
 use neo_audio::processors::player::Sender;
-use realtime_tools::smooth_value::{Easing, Linear, SmoothValue};
+
 
 use pitch_shift::{synthesis_length, PitchShiftResult, PitchShifter};
 use crate::UiMessage;
@@ -94,7 +94,7 @@ impl PitchProcessor {
             self.input_buffer.pop_front();
         }
 
-        if (self.pitch_shifter.first_time) {
+        if self.pitch_shifter.first_time {
             println!("First window succeeded")
         }
         self.pitch_shifter.first_time = false;

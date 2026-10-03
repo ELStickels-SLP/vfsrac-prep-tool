@@ -88,6 +88,7 @@ impl ChoiceParameter {
         &self.choices[self.index() as usize]
     }
 
+    #[allow(clippy::result_unit_err)]
     pub fn set_choice(&self, choice: &str) -> Result<(), ()> {
         for (i, c) in self.choices.iter().enumerate() {
             if c == choice {
@@ -132,7 +133,7 @@ impl IntParameter {
         Self {
             value: AtomicI32::new(default),
             name: name.into(),
-            default: default,
+            default,
             range,
         }
     }
@@ -308,14 +309,14 @@ mod tests {
     fn test_bool() {
         let param = BoolParameter::new("test-param", true);
 
-        assert_eq!(param.default(), true);
+        assert!(param.default());
         assert_eq!(param.name(), "test-param");
-        assert_eq!(param.value(), true);
+        assert!(param.value());
 
         param.set_value(false);
-        assert_eq!(param.value(), false);
+        assert!(!param.value());
 
         param.set_value(true);
-        assert_eq!(param.value(), true);
+        assert!(param.value());
     }
 }

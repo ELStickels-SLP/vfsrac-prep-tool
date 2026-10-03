@@ -84,7 +84,6 @@ pub trait AudioBackend {
         Ok(self.config())
     }
     /// get the selected config all at once, for saving state
-
     fn config(&self) -> DeviceConfig {
         DeviceConfig {
             api: self.api(),
