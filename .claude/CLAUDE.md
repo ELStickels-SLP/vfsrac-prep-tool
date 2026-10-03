@@ -9,14 +9,21 @@ builds and runs just that app. Passing `voice-pitch-feedback` as a trailing
 arg does nothing useful — `cargo run`'s positional args go to the program
 itself, not to package selection.
 
-The `pitch_shift` phase-vocoder logic (`shift_pitch_window`) lives in the
-`crates/pitch-shift` library, shared by:
+The phase-vocoder `PitchShifter` (`crates/pitch-shift/src/phase_vocoder.rs`)
+and the shared settings (window/FFT length options, default pitches,
+`synthesis_length`) live in the `crates/pitch-shift` library, shared by:
 
 - **`voice-pitch-feedback`** — the realtime GUI app.
 - **`voice-pitch-offline`** — a CLI that pitch-shifts a WAV file on disk
-  (`cargo run -p voice-pitch-offline -- <input.wav> <output.wav> --pitch-hz
-  <hz>`). It isn't in `default-members` since it isn't the app's `cargo
+  with the same buffering and latency as the app (`cargo run -p
+  voice-pitch-offline -- <input.wav> <output.wav> [--pitch-hz <hz>]
+  [--target-pitch <hz>] [--window <n>] [--fft-length <n>]`). Each app
+  dropdown/slider has a matching flag, validated against the same option
+  lists. It isn't in `default-members` since it isn't the app's `cargo
   run` target; build/run it with `-p voice-pitch-offline` explicitly.
+
+The older `shift_pitch_window` in `crates/pitch-shift/src/lib.rs` is no
+longer used by either app; only its unit tests exercise it.
 
 `pitch-shift` has no GUI dependencies (it reimplements the one `egui::remap`
 helper it needed) so it's safe for the CLI to depend on without pulling in

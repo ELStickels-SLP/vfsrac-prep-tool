@@ -4,14 +4,14 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
-use pitch_shift::{shift_pitch_window, PitchShiftResult};
+use pitch_shift::{
+    synthesis_length, PitchShiftResult, PitchShifter, ANALYSIS_WIN_LENGTH_OPTIONS,
+    DEFAULT_ANALYSIS_WIN_LENGTH, DEFAULT_FFT_LENGTH, DEFAULT_PITCH_AMOUNT, DEFAULT_TARGET_PITCH,
+    FFT_LENGTH_OPTIONS,
+};
 
-// Matches the realtime app's default analysis window length
-// (DEFAULT_ANALYSIS_WIN_LENGTH in voice-pitch-feedback/src/main.rs).
-const DEFAULT_WINDOW: usize = 1500;
-
-/// Shifts the pitch of a WAV file by a fixed amount and writes the result to
-/// another WAV file.
+/// Shifts the pitch of a WAV file and writes the result to another WAV file.
+/// Uses the same processing and settings as the realtime app.
 #[derive(Parser)]
 #[command(version, about)]
 struct Args {
@@ -22,12 +22,33 @@ struct Args {
     output: PathBuf,
 
     /// Pitch shift amount, in Hz.
-    #[arg(short = 'p', long = "pitch-hz")]
+    #[arg(short = 'p', long = "pitch-hz", default_value_t = DEFAULT_PITCH_AMOUNT)]
     pitch_amount_hz: f32,
 
+    /// Target pitch, in Hz.
+    #[arg(short = 't', long = "target-pitch", default_value_t = DEFAULT_TARGET_PITCH)]
+    target_pitch_hz: f32,
+
     /// Analysis window length, in samples.
-    #[arg(short = 'w', long, default_value_t = DEFAULT_WINDOW)]
+    #[arg(short = 'w', long, default_value_t = DEFAULT_ANALYSIS_WIN_LENGTH,
+          value_parser = one_of(&ANALYSIS_WIN_LENGTH_OPTIONS))]
     window: usize,
+
+    /// FFT length, in samples.
+    #[arg(short = 'f', long, default_value_t = DEFAULT_FFT_LENGTH,
+          value_parser = one_of(&FFT_LENGTH_OPTIONS))]
+    fft_length: usize,
+}
+
+fn one_of(options: &'static [usize]) -> impl Fn(&str) -> Result<usize, String> + Clone {
+    move |s| {
+        let value: usize = s.parse().map_err(|e| format!("{e}"))?;
+        if options.contains(&value) {
+            Ok(value)
+        } else {
+            Err(format!("must be one of {options:?}"))
+        }
+    }
 }
 
 fn main() {
@@ -46,14 +67,7 @@ fn run(args: &Args) -> Result<(), Box<dyn Error>> {
 
     let shifted_channels: Vec<Vec<f32>> = channels
         .iter()
-        .map(|channel| {
-            shift_channel(
-                channel,
-                spec.sample_rate,
-                args.window,
-                args.pitch_amount_hz,
-            )
-        })
+        .map(|channel| shift_channel(channel, spec.sample_rate, args))
         .collect();
 
     let output_interleaved = interleave(&shifted_channels);
@@ -62,38 +76,27 @@ fn run(args: &Args) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Runs `samples` through `shift_pitch_window` one non-overlapping window at
-/// a time, carrying phase state across windows the same way the realtime
-/// `PitchProcessor` does.
-fn shift_channel(
-    samples: &[f32],
-    sample_rate: u32,
-    analysis_win_length: usize,
-    pitch_amount_hz: f32,
-) -> Vec<f32> {
-    let mut angle_buffer = vec![0.0; analysis_win_length];
-    let mut first_window = true;
-    let mut output = Vec::with_capacity(samples.len());
+/// Copies the buffering of the realtime `PitchProcessor`, so the output has
+/// the same latency as the app. The output is `fft_length` samples longer
+/// than the input, so the tail is not cut off.
+fn shift_channel(samples: &[f32], sample_rate: u32, args: &Args) -> Vec<f32> {
+    let n_fft = args.fft_length;
+    let n_anal = args.window;
+    let n_synth = synthesis_length(n_anal, args.target_pitch_hz, args.pitch_amount_hz);
+    let mut shifter = PitchShifter::new(n_anal, n_synth, n_fft, sample_rate as usize);
 
-    for chunk in samples.chunks(analysis_win_length) {
-        let mut window = chunk.to_vec();
-        window.resize(analysis_win_length, 0.0);
+    let mut padded = samples.to_vec();
+    padded.resize(samples.len() + n_fft, 0.0);
 
-        let PitchShiftResult {
-            samples: shifted, ..
-        } = shift_pitch_window(
-            &window,
-            sample_rate,
-            analysis_win_length,
-            pitch_amount_hz,
-            &mut angle_buffer,
-            first_window,
-        );
-        first_window = false;
-
-        output.extend_from_slice(&shifted[..chunk.len()]);
+    // The app outputs silence until the first full FFT frame is available.
+    let mut output = vec![0.0; n_fft];
+    let mut pos = 0;
+    while pos + n_fft <= padded.len() {
+        let PitchShiftResult { samples: shifted, .. } = shifter.process(&padded[pos..pos + n_fft]);
+        output.extend_from_slice(&shifted);
+        pos += n_anal;
     }
-
+    output.truncate(padded.len());
     output
 }
 

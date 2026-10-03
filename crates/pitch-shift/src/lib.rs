@@ -1,5 +1,23 @@
 use oxifft::{Complex, irfft, rfft};
 
+mod phase_vocoder;
+pub use phase_vocoder::PitchShifter;
+
+// Settings shared by the realtime app and the offline CLI.
+// Longer windows overlap too little with the FFT lengths below.
+pub const ANALYSIS_WIN_LENGTH_OPTIONS: [usize; 4] = [64, 100, 128, 200];
+pub const DEFAULT_ANALYSIS_WIN_LENGTH: usize = 100;
+// The FFT length sets most of the latency (about 0.9 * fft_length samples).
+pub const FFT_LENGTH_OPTIONS: [usize; 2] = [1024, 2048];
+pub const DEFAULT_FFT_LENGTH: usize = 2048;
+pub const DEFAULT_TARGET_PITCH: f32 = 200.0;
+pub const DEFAULT_PITCH_AMOUNT: f32 = 70.0;
+
+/// Synthesis hop that raises `target_pitch` by `pitch_amount`.
+pub fn synthesis_length(analysis_length: usize, target_pitch: f32, pitch_amount: f32) -> usize {
+    (analysis_length as f32 * (target_pitch + pitch_amount) / target_pitch).round() as usize
+}
+
 pub struct PitchShiftResult {
     pub peak_freq: f32,
     pub samples: Vec<f32>,
