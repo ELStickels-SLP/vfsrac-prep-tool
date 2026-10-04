@@ -234,15 +234,6 @@ impl eframe::App for NeoAudioEguiExample {
 
             let backend = self.neo_audio.backend();
 
-            // API
-            egui::ComboBox::from_label("Api")
-                .selected_text(backend.api())
-                .show_ui(ui, |ui| {
-                    for api in backend.available_apis() {
-                        ui.selectable_value(&mut self.config.api, api.clone(), api);
-                    }
-                });
-
             // Output Device
             egui::ComboBox::from_label("Output Device")
                 .selected_text(format!(
@@ -275,7 +266,16 @@ impl eframe::App for NeoAudioEguiExample {
                     }
                 });
 
-            ui.horizontal(|ui| {
+            egui::CollapsingHeader::new("Advanced Settings").show(ui, |ui| {
+                // API
+                egui::ComboBox::from_label("Api")
+                    .selected_text(backend.api())
+                    .show_ui(ui, |ui| {
+                        for api in backend.available_apis() {
+                            ui.selectable_value(&mut self.config.api, api.clone(), api);
+                        }
+                    });
+
                 // Sample Rate
                 egui::ComboBox::from_label("Sample Rate")
                     .selected_text(format!("{}", backend.sample_rate()))
@@ -416,6 +416,8 @@ impl eframe::App for NeoAudioEguiExample {
                 ui.add(level_meter(0.0..=300.0, cur_level));
                 ui.label(format!("Level: {}hz", cur_level));
             });
+
+            #[cfg(debug_assertions)]
             ui.label(format!("Windows processed: {}", self.windows_processed));
 
             self.show_plot(ui, cur_level);
