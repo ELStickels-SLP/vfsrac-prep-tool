@@ -92,7 +92,9 @@ fn shift_channel(samples: &[f32], sample_rate: u32, args: &Args) -> Vec<f32> {
     let mut output = vec![0.0; n_fft];
     let mut pos = 0;
     while pos + n_fft <= padded.len() {
-        let PitchShiftResult { samples: shifted, .. } = shifter.process(&padded[pos..pos + n_fft]);
+        let PitchShiftResult {
+            samples: shifted, ..
+        } = shifter.process(&padded[pos..pos + n_fft]);
         output.extend_from_slice(&shifted);
         pos += n_anal;
     }
@@ -121,9 +123,7 @@ fn interleave(channels: &[Vec<f32>]) -> Vec<f32> {
     result
 }
 
-fn read_samples(
-    reader: &mut hound::WavReader<BufReader<File>>,
-) -> Result<Vec<f32>, hound::Error> {
+fn read_samples(reader: &mut hound::WavReader<BufReader<File>>) -> Result<Vec<f32>, hound::Error> {
     let spec = reader.spec();
     match spec.sample_format {
         hound::SampleFormat::Float => reader.samples::<f32>().collect(),

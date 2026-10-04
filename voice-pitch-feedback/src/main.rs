@@ -1,7 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-
-
 use eframe::egui::{self, Response};
 use egui_plot::{FilledArea, HLine, Line, Plot, PlotBounds};
 use level_meter::level_meter;
@@ -63,8 +61,6 @@ fn middle(values: &[u32]) -> Option<u32> {
     sorted.get(sorted.len() / 2).copied()
 }
 
-
-
 fn main() {
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
@@ -121,8 +117,7 @@ impl NeoAudioEguiExample {
         let mut target_pitch = DEFAULT_TARGET_PITCH;
         let mut restored_config = None;
         if let Some(storage) = cc.storage {
-            if let Some(persisted) = eframe::get_value::<PersistedSettings>(storage, SETTINGS_KEY)
-            {
+            if let Some(persisted) = eframe::get_value::<PersistedSettings>(storage, SETTINGS_KEY) {
                 restored_config = Some(persisted.config);
                 // Saved values can be options that no longer exist.
                 if ANALYSIS_WIN_LENGTH_OPTIONS.contains(&persisted.analysis_win_length) {

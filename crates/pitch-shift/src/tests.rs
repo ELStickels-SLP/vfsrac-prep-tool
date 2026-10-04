@@ -17,7 +17,6 @@ const TEST_HZ_RAISE: f32 = 70.;
 const PEAK_TOLERANCE_HZ: f32 = 2.0 * HZ_RATIO;
 const PEAK_TOLERANCE_BINS: usize = 2;
 
-
 /// Generates a bin-aligned test tone.
 ///
 /// Uses cosine phase rather than sine: `pitch_weight` ranks bins by

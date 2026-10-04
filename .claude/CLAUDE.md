@@ -39,7 +39,8 @@ flow, and known gotchas.
 On Windows, run `cargo clippy -p voice-pitch-feedback -p voice-pitch-offline
 -p pitch-shift -p realtime-tools --all-targets` and `cargo test -p pitch-shift
 -p realtime-tools`. `--workspace` fails there (`neo-audio` defaults to
-`portaudio`). Keep clippy warning-free.
+`portaudio`). Keep clippy warning-free. Run `cargo fmt --all --check`
+(config in `rustfmt.toml`); `cargo fmt --all` fixes it.
 
 ## Audio backend selection
 

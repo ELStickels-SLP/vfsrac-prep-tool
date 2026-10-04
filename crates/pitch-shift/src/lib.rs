@@ -1,4 +1,4 @@
-use oxifft::{Complex, irfft, rfft};
+use oxifft::{irfft, rfft, Complex};
 
 mod phase_vocoder;
 pub use phase_vocoder::PitchShifter;
@@ -44,15 +44,14 @@ pub fn shift_pitch_window(
         peak_freq /= 2.
     }
 
-
     let hop_ratio = (peak_freq + pitch_amount_hz) / peak_freq;
     let synth_len = (analysis_win_length as f32 * hop_ratio).round() as usize;
 
     // early out if we don't find anything useful
-    if peak_freq < 30. || hop_ratio < 1. || synth_len < 2  {
+    if peak_freq < 30. || hop_ratio < 1. || synth_len < 2 {
         return PitchShiftResult {
             peak_freq: -1.,
-            samples: samples.to_vec()
+            samples: samples.to_vec(),
         };
     }
 
@@ -64,7 +63,6 @@ pub fn shift_pitch_window(
 
     let output_samples = irfft(&spectrum, synth_len);
     // let output_samples = resample(&samples[..analysis_win_length], synth_len);
-
 
     let mut output = Vec::<f32>::with_capacity(analysis_win_length);
 
@@ -94,12 +92,16 @@ fn remap(x: f32, from_lo: f32, from_hi: f32, to_lo: f32, to_hi: f32) -> f32 {
 }
 
 #[allow(dead_code)]
-fn spectrum_phase_match(spectrum:  &mut [Complex<f32>],  angles: &mut[f32], hop_ratio: f32, first_time:bool) {
-
+fn spectrum_phase_match(
+    spectrum: &mut [Complex<f32>],
+    angles: &mut [f32],
+    hop_ratio: f32,
+    first_time: bool,
+) {
     let len = spectrum.len();
     let twopi = 2.0 * std::f32::consts::PI;
     for (i, (s, prev_angle)) in spectrum.iter_mut().zip(angles.iter_mut()).enumerate() {
-        let t = twopi * i as f32 / len as f32 ;
+        let t = twopi * i as f32 / len as f32;
 
         let s_mag = s.norm();
         let s_angle = s.im.atan2(s.re);
@@ -163,9 +165,7 @@ fn peak_frequency(spectrum: &[oxifft::Complex<f32>], hz_ratio: f32) -> f32 {
         .iter()
         .enumerate()
         .skip(1)
-        .max_by(|(_, a), (_, b)| {
-            a.re.total_cmp(&b.re)
-        })
+        .max_by(|(_, a), (_, b)| a.re.total_cmp(&b.re))
         .unwrap();
 
     let amplitude = peak_bin.norm() / (spectrum.len() - 1) as f32;

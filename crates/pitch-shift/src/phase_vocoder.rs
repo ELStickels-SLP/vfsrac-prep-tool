@@ -1,4 +1,4 @@
-use oxifft::{Complex, rfft, irfft};
+use oxifft::{irfft, rfft, Complex};
 use std::f32::consts::PI;
 
 use crate::PitchShiftResult;
@@ -16,23 +16,21 @@ pub struct PitchShifter {
     ola_norm: Vec<f32>,
     pub first_time: bool,
     pub sample_rate: usize,
-    pub min_bins:usize,
 }
 
 impl PitchShifter {
-    pub fn new(n_anal: usize, n_synth: usize, n_fft: usize, sample_rate:usize) -> Self {
+    pub fn new(n_anal: usize, n_synth: usize, n_fft: usize, sample_rate: usize) -> Self {
         let bins = n_fft / 2 + 1;
         // unwrapdata = 2*pi*k*n_anal / n_fft (expected phase advance over one analysis hop)
         let mut unwrapdata = vec![0.0; bins];
-        for k in 0..bins {
-            unwrapdata[k] = 2.0 * PI * k as f32 * n_anal as f32 / n_fft as f32;
+        for (k, u) in unwrapdata.iter_mut().enumerate() {
+            *u = 2.0 * PI * k as f32 * n_anal as f32 / n_fft as f32;
         }
         // Periodic Hann
         let window = (0..n_fft)
             .map(|i| 0.5 - 0.5 * (2.0 * PI * i as f32 / n_fft as f32).cos())
             .collect();
         PitchShifter {
-            min_bins: bins,
             n_anal,
             n_synth,
             n_fft,
@@ -43,7 +41,7 @@ impl PitchShifter {
             ola: vec![0.0; n_fft],
             ola_norm: vec![0.0; n_fft],
             first_time: true,
-            sample_rate
+            sample_rate,
         }
     }
 
@@ -65,8 +63,9 @@ impl PitchShifter {
         for i in 0..bins {
             let mut dphi = phi[i] - self.phi_prev[i] - self.unwrapdata[i];
             // Wrap to [-pi, pi]
-            dphi = dphi - (dphi / (2.0 * PI)).round() * 2.0 * PI; 
-            phi_unwrap[i] = (dphi + self.unwrapdata[i]) * (self.n_synth as f32 / self.n_anal as f32);
+            dphi = dphi - (dphi / (2.0 * PI)).round() * 2.0 * PI;
+            phi_unwrap[i] =
+                (dphi + self.unwrapdata[i]) * (self.n_synth as f32 / self.n_anal as f32);
         }
 
         if self.first_time {
@@ -90,9 +89,9 @@ impl PitchShifter {
 
         // Weighted overlap-add at the synthesis hop. Divide by the summed
         // squared window so the gain stays flat for any n_synth.
-        for i in 0..self.n_fft {
-            self.ola[i] += synth[i] * self.window[i];
-            self.ola_norm[i] += self.window[i] * self.window[i];
+        for (i, (s, w)) in synth.iter().zip(&self.window).enumerate().take(self.n_fft) {
+            self.ola[i] += s * w;
+            self.ola_norm[i] += w * w;
         }
         let obuf: Vec<f32> = self.ola[..self.n_synth]
             .iter()
@@ -108,13 +107,13 @@ impl PitchShifter {
         // Resample obuf of length n_synth back to n_anal via linear interpolation
         let mut out = vec![0.0; self.n_anal];
         let hop = self.n_synth as f32 / self.n_anal as f32;
-        for i in 0..self.n_anal {
+        for (i, o) in out.iter_mut().enumerate() {
             let idx = i as f32 * hop;
             let idx_floor = idx.floor() as usize;
             let frac = idx - idx.floor();
             let a = obuf.get(idx_floor).copied().unwrap_or(0.0);
             let b = obuf.get(idx_floor + 1).copied().unwrap_or(0.0);
-            out[i] = a * (1.0 - frac) + b * frac;
+            *o = a * (1.0 - frac) + b * frac;
         }
         // Save phi for next iteration
         self.phi_prev.clone_from_slice(&phi);
@@ -145,7 +144,9 @@ fn lock_phases(phi_syn: &mut [f32], phi: &[f32], phi_unwrap: &[f32], mag: &[f32]
     let mut region_start = 0;
     for (j, &p) in peaks.iter().enumerate() {
         let region_end = match peaks.get(j + 1) {
-            Some(&next) => (p + 1..next).min_by(|&a, &b| mag[a].total_cmp(&mag[b])).unwrap_or(next),
+            Some(&next) => (p + 1..next)
+                .min_by(|&a, &b| mag[a].total_cmp(&mag[b]))
+                .unwrap_or(next),
             None => bins,
         };
         let peak_syn = (phi_syn[p] + phi_unwrap[p]).rem_euclid(2.0 * PI);
@@ -155,7 +156,6 @@ fn lock_phases(phi_syn: &mut [f32], phi: &[f32], phi_unwrap: &[f32], mag: &[f32]
         region_start = region_end;
     }
 }
-
 
 /// A peak bin magnitude below this fraction of full scale is treated as
 /// noise floor rather than a real tone. `rfft` is unnormalized, so the
@@ -179,7 +179,6 @@ fn peak_frequency(spectrum: &[oxifft::Complex<f32>], hz_ratio: f32) -> f32 {
     if amplitude < MIN_PEAK_AMPLITUDE {
         return -1.;
     }
-    
 
     let peak_freq = peak_idx as f32 * hz_ratio;
     if peak_freq > 300. {

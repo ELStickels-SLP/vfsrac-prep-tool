@@ -3,11 +3,11 @@ use std::collections::VecDeque;
 use neo_audio::prelude::*;
 use neo_audio::processors::player::Sender;
 
-
-use pitch_shift::{synthesis_length, PitchShiftResult, PitchShifter};
 use crate::UiMessage;
+use pitch_shift::{synthesis_length, PitchShiftResult, PitchShifter};
 
 pub enum PitchMessage {
+    #[allow(dead_code)]
     Pitch(f32),
 }
 
@@ -18,7 +18,6 @@ pub struct PitchProcessor {
     fft_length: usize,
     pitch_shifter: PitchShifter,
 
-    
     // // Streaming buffers
     input_buffer: VecDeque<f32>,
     output_buffer: VecDeque<f32>,
@@ -26,14 +25,25 @@ pub struct PitchProcessor {
 }
 
 impl PitchProcessor {
-    pub fn new(sample_rate: u32, analysis_length: usize, fft_length: usize, ui_sender: Sender<UiMessage>, target_pitch:f32, pitch_amount:f32) -> Self {
+    pub fn new(
+        sample_rate: u32,
+        analysis_length: usize,
+        fft_length: usize,
+        ui_sender: Sender<UiMessage>,
+        target_pitch: f32,
+        pitch_amount: f32,
+    ) -> Self {
         let synthesis_length = synthesis_length(analysis_length, target_pitch, pitch_amount);
-        
 
         Self {
             analysis_length,
             fft_length,
-            pitch_shifter: PitchShifter::new(analysis_length, synthesis_length, fft_length, sample_rate as usize),
+            pitch_shifter: PitchShifter::new(
+                analysis_length,
+                synthesis_length,
+                fft_length,
+                sample_rate as usize,
+            ),
 
             input_buffer: VecDeque::<f32>::new(),
             output_buffer: VecDeque::<f32>::new(),
@@ -70,7 +80,7 @@ impl AudioProcessor for PitchProcessor {
             *o = self.output_buffer.pop_front().unwrap_or(0.0)
         }
 
-        // TODO: Keep 
+        // TODO: Keep
         while self.input_buffer.len() >= self.fft_length {
             self.process_window();
         }
@@ -82,7 +92,10 @@ impl PitchProcessor {
         let samples = &self.input_buffer.make_contiguous()[..self.fft_length];
         // let pitch_amount_hz = self.pitch_amount.next_value();
 
-        let PitchShiftResult { samples: out, peak_freq } = self.pitch_shifter.process(samples);
+        let PitchShiftResult {
+            samples: out,
+            peak_freq,
+        } = self.pitch_shifter.process(samples);
 
         // Send the pitch to the screen
         self.ui_sender.send(UiMessage::Level(peak_freq)).unwrap();
