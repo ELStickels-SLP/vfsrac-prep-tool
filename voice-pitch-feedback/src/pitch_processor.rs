@@ -4,7 +4,7 @@ use neo_audio::prelude::*;
 use neo_audio::processors::player::Sender;
 use realtime_tools::smooth_value::{Easing, Linear, SmoothValue};
 
-use crate::pitch_shifter::{PitchShifter, PitchShiftResult};
+use pitch_shift::{synthesis_length, PitchShiftResult, PitchShifter};
 use crate::UiMessage;
 
 pub enum PitchMessage {
@@ -26,15 +26,14 @@ pub struct PitchProcessor {
 }
 
 impl PitchProcessor {
-    pub fn new(sample_rate: u32, analysis_length: usize, ui_sender: Sender<UiMessage>, target_pitch:f32, pitch_amount:f32) -> Self {
-        let synthesis_length =
-            (analysis_length as f32 * (target_pitch + pitch_amount) / target_pitch).round() as usize;
+    pub fn new(sample_rate: u32, analysis_length: usize, fft_length: usize, ui_sender: Sender<UiMessage>, target_pitch:f32, pitch_amount:f32) -> Self {
+        let synthesis_length = synthesis_length(analysis_length, target_pitch, pitch_amount);
         
 
         Self {
             analysis_length,
-            fft_length: 2048,
-            pitch_shifter: PitchShifter::new(analysis_length, synthesis_length, 2048, sample_rate as usize),
+            fft_length,
+            pitch_shifter: PitchShifter::new(analysis_length, synthesis_length, fft_length, sample_rate as usize),
 
             input_buffer: VecDeque::<f32>::new(),
             output_buffer: VecDeque::<f32>::new(),

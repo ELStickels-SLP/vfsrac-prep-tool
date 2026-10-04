@@ -18,14 +18,13 @@ use neo_audio::backends::rtaudio_backend::RtAudioBackend as AudioBackendImpl;
 
 mod level_meter;
 mod pitch_processor;
-mod pitch_shifter;
 
 use pitch_processor::PitchProcessor;
 
-static ANALYSIS_WIN_LENGTH_OPTIONS: [usize; 6] = [64, 100, 128, 200, 256, 512];
-static DEFAULT_ANALYSIS_WIN_LENGTH: usize = 100;
-static DEFAULT_TARGET_PITCH: f32 = 200.0;
-static DEFAULT_PITCH_AMOUNT: f32 = 70.0;
+use pitch_shift::{
+    ANALYSIS_WIN_LENGTH_OPTIONS, DEFAULT_ANALYSIS_WIN_LENGTH, DEFAULT_FFT_LENGTH,
+    DEFAULT_PITCH_AMOUNT, DEFAULT_TARGET_PITCH, FFT_LENGTH_OPTIONS,
+};
 
 const PITCH_HISTOGRAM_INTERVAL: f64 = 1.0 / 30.0;
 
@@ -36,8 +35,14 @@ const SETTINGS_KEY: &str = "device_settings";
 struct PersistedSettings {
     config: DeviceConfig,
     analysis_win_length: usize,
+    #[serde(default = "default_fft_length")]
+    fft_length: usize,
     pitch_amount: f32,
     target_pitch: f32,
+}
+
+fn default_fft_length() -> usize {
+    DEFAULT_FFT_LENGTH
 }
 
 // Set by git tags or "local" if not set
@@ -74,6 +79,8 @@ struct NeoAudioEguiExample {
     config: DeviceConfig,
     analysis_win_length: usize,
     applied_analysis_win_length: usize,
+    fft_length: usize,
+    applied_fft_length: usize,
     ui_sender: Sender<UiMessage>,
     ui_receiver: Receiver<UiMessage>,
     pitch_level: SmoothValue,
@@ -106,6 +113,7 @@ impl NeoAudioEguiExample {
         }
 
         let mut analysis_win_length = DEFAULT_ANALYSIS_WIN_LENGTH;
+        let mut fft_length = DEFAULT_FFT_LENGTH;
         let mut pitch_amount = DEFAULT_PITCH_AMOUNT;
         let mut target_pitch = DEFAULT_TARGET_PITCH;
         let mut restored_config = None;
@@ -113,7 +121,13 @@ impl NeoAudioEguiExample {
             if let Some(persisted) = eframe::get_value::<PersistedSettings>(storage, SETTINGS_KEY)
             {
                 restored_config = Some(persisted.config);
-                analysis_win_length = persisted.analysis_win_length;
+                // Saved values can be options that no longer exist.
+                if ANALYSIS_WIN_LENGTH_OPTIONS.contains(&persisted.analysis_win_length) {
+                    analysis_win_length = persisted.analysis_win_length;
+                }
+                if FFT_LENGTH_OPTIONS.contains(&persisted.fft_length) {
+                    fft_length = persisted.fft_length;
+                }
                 pitch_amount = persisted.pitch_amount;
                 target_pitch = persisted.target_pitch;
             }
@@ -134,6 +148,8 @@ impl NeoAudioEguiExample {
             config,
             analysis_win_length,
             applied_analysis_win_length: analysis_win_length,
+            fft_length,
+            applied_fft_length: fft_length,
             neo_audio,
             ui_sender,
             ui_receiver,
@@ -197,6 +213,7 @@ impl eframe::App for NeoAudioEguiExample {
             &PersistedSettings {
                 config: self.config.clone(),
                 analysis_win_length: self.analysis_win_length,
+                fft_length: self.fft_length,
                 pitch_amount: self.pitch_amount,
                 target_pitch: self.target_pitch,
             },
@@ -286,6 +303,18 @@ impl eframe::App for NeoAudioEguiExample {
                             );
                         }
                     });
+
+                egui::ComboBox::from_label("FFT Length")
+                    .selected_text(self.fft_length.to_string())
+                    .show_ui(ui, |ui| {
+                        for fft_length in FFT_LENGTH_OPTIONS {
+                            ui.selectable_value(
+                                &mut self.fft_length,
+                                fft_length,
+                                fft_length.to_string(),
+                            );
+                        }
+                    });
             });
 
             ui.add(
@@ -297,6 +326,7 @@ impl eframe::App for NeoAudioEguiExample {
 
             if self.config != backend.config()
                 || self.analysis_win_length != self.applied_analysis_win_length
+                || self.fft_length != self.applied_fft_length
                 || self.pitch_amount != self.applied_pitch_amount
                 || self.target_pitch != self.applied_target_pitch
             {
@@ -311,6 +341,7 @@ impl eframe::App for NeoAudioEguiExample {
                     .set_config(&self.config)
                     .unwrap();
                 self.applied_analysis_win_length = self.analysis_win_length;
+                self.applied_fft_length = self.fft_length;
                 self.applied_pitch_amount = self.pitch_amount;
                 self.applied_target_pitch = self.target_pitch;
             }
@@ -329,6 +360,7 @@ impl eframe::App for NeoAudioEguiExample {
                             .start_audio(PitchProcessor::new(
                                 self.config.sample_rate,
                                 self.analysis_win_length,
+                                self.fft_length,
                                 self.ui_sender.clone(),
                                 self.target_pitch,
                                 self.pitch_amount,
